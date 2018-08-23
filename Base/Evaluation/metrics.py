@@ -101,12 +101,12 @@ class Gini_Index(Metrics_Object):
 
         recommended_counter_mask = np.ones_like(recommended_counter, dtype = np.bool)
         recommended_counter_mask[self.ignore_items] = False
+        recommended_counter_mask[recommended_counter == 0] = False
 
         recommended_counter = recommended_counter[recommended_counter_mask]
 
         n_items = len(recommended_counter)
 
-        recommended_counter += np.ones_like(recommended_counter) * 1e-9 # values cannot be 0
         recommended_counter_sorted = np.sort(recommended_counter)       # values must be sorted
         index = np.arange(1, n_items+1)                                 # index per array element
 
