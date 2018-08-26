@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 
-@author: Massimo Quadrana, Maurizio Ferrari Dacrema
+@author: Maurizio Ferrari Dacrema, Massimo Quadrana
 """
 
 
@@ -85,6 +85,8 @@ class Gini_Index(Metrics_Object):
     # From https://github.com/oliviaguest/gini
     # based on bottom eq: http://www.statsdirect.com/help/content/image/stat0206_wmf.gif
     # from: http://www.statsdirect.com/help/default.htm#nonparametric_methods/gini.htm
+    #
+    # This Gini Index ignores items with NO occurrence
     """
 
     def __init__(self, n_items, ignore_items):
@@ -211,6 +213,8 @@ import scipy.sparse as sps
 class Novelty(Metrics_Object):
     """
     Mean self-information  (Zhou 2010)
+    Computed via the log popularity of recommended items
+    Cannot be used to compute novelty of cold items
     """
 
     def __init__(self, URM_train):
@@ -257,6 +261,7 @@ class Novelty(Metrics_Object):
 
 class Diversity_similarity(Metrics_Object):
     """
+    Intra-list diversity
     Computes the diversity by using an item_diversity_matrix
     """
 
@@ -330,23 +335,14 @@ class Diversity_MeanInterList(Metrics_Object):
     # co_counts[np.arange(0, n_user, dtype=np.int):np.arange(0, n_user, dtype=np.int)] = 0
     # diversity = (n_user**2 - n_user) - co_counts.sum()/self.cutoff
 
-    # Due to the last summation, we don't need to know the value for each specific couple of users (u1, u2),
-    # but rather, given a user1, how many times itemA was recommended to "someone else".
-    # We solve this in the following steps:
-    # 1 - Compute the total number of times an item has been recommended (item-occurrence)
-    # 2 - Loop for each user U:
-    #       2a - Select only the items recommended to user U
-    #       2b - Compute the summation of their occurrencies
-    #       2c - Decrease the count by the number of items recommended to user U.
-    #            This allows to ignore the diagonal (U, U) and avoids to reduce the count before step 2b which is more computationally intensive
-    # 3 - Cumulate the result of step 2. This will be the co_counts.sum() value
-
-    # Furthermore, consider that each item-occurrence value will be cumulated once for each associated user
-    # meaning an item-occurrence of 5 will be cumulated as (5-1) exactly 5 times
-    # Therefore we can remove the loop and obtain the co_counts.sum() value as:
+    # If we represent the summation of co_counts separating it for each item, we will have:
+    # co_counts.sum() = co_counts_item1.sum()  + co_counts_item2.sum() ...
+    # If we know how many times an item has been recommended, co_counts_item1.sum() can be computed as how many couples of
+    # users have item1 in common. If item1 has been recommended n times, the number of couples is n*(n-1)
+    # Therefore we can compute co_counts.sum() value as:
     # np.sum(np.multiply(item-occurrence, item-occurrence-1))
 
-    # In the end, the naive implementation URM_predicted.dot(URM_predicted.T) might require an hour of computation
+    # The naive implementation URM_predicted.dot(URM_predicted.T) might require an hour of computation
     # The last implementation has a negligible computational time even for very big datasets
 
     """

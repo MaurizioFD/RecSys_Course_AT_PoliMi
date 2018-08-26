@@ -24,7 +24,7 @@ class MyTestCase(unittest.TestCase):
         gini_index.recommended_counter = np.ones(n_items)
         assert np.isclose(0.0, gini_index.get_metric_value(), atol=1e-3), "Gini_Index metric incorrect"
 
-        gini_index.recommended_counter = np.zeros(n_items)
+        gini_index.recommended_counter = np.ones(n_items)*1e-12
         gini_index.recommended_counter[0] = 1.0
         assert np.isclose(1.0, gini_index.get_metric_value(), atol=1e-3), "Gini_Index metric incorrect"
 
