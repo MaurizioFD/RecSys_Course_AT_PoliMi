@@ -65,9 +65,8 @@ class MF_MSE_PyTorch(Recommender, Incremental_Training_Early_Stopping):
 
 
 
-    def fit(self, epochs=30, logFile=None, filterTopPop = False, filterCustomItems = np.array([], dtype=np.int), minRatingsPerUser=1,
-            batch_size = 128, num_factors=10,
-            learning_rate = 0.001, sgd_mode='sgd', user_reg = 0.0, positive_reg = 0.0, negative_reg = 0.0,
+    def fit(self, epochs=30, batch_size = 128, num_factors=10,
+            learning_rate = 0.001,
             stop_on_validation = False, lower_validatons_allowed = 5, validation_metric = "MAP",
             evaluator_object = None, validation_every_n = 1, use_cuda = True):
 
@@ -89,7 +88,7 @@ class MF_MSE_PyTorch(Recommender, Incremental_Training_Early_Stopping):
         URM_train_positive.data = URM_train_positive.data >= self.positive_threshold
         URM_train_positive.eliminate_zeros()
 
-        self.sgd_mode = sgd_mode
+
         self.batch_size = batch_size
         self.learning_rate = learning_rate
 
