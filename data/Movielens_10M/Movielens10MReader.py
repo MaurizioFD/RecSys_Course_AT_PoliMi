@@ -11,71 +11,44 @@ import numpy as np
 import scipy.sparse as sps
 import zipfile
 
+from data.IncrementalSparseMatrix import IncrementalSparseMatrix
 
 
 
-def removeZeroRatingRowAndCol(URM):
 
-    rows = URM.indptr
-    numRatings = np.ediff1d(rows)
-    mask = numRatings >= 1
+def split_train_validation_test(URM_all, split_train_test_validation_quota):
 
-    URM = URM[mask,:]
+    URM_all = URM_all.tocoo()
+    URM_shape = URM_all.shape
 
-    cols = URM.tocsc().indptr
-    numRatings = np.ediff1d(cols)
-    mask = numRatings >= 1
+    numInteractions= len(URM_all.data)
 
-    URM = URM[:,mask]
-
-    return URM.tocsr()
+    split = np.random.choice([1, 2, 3], numInteractions, p=split_train_test_validation_quota)
 
 
+    trainMask = split == 1
+    URM_train = sps.coo_matrix((URM_all.data[trainMask], (URM_all.row[trainMask], URM_all.col[trainMask])), shape=URM_shape)
+    URM_train = URM_train.tocsr()
 
-def loadCSVintoSparse (filePath, header = False, separator="::"):
+    testMask = split == 2
 
-    values, rows, cols = [], [], []
+    URM_test = sps.coo_matrix((URM_all.data[testMask], (URM_all.row[testMask], URM_all.col[testMask])), shape=URM_shape)
+    URM_test = URM_test.tocsr()
 
-    fileHandle = open(filePath, "r")
-    numCells = 0
+    validationMask = split == 3
 
-    if header:
-        fileHandle.readline()
+    URM_validation = sps.coo_matrix((URM_all.data[validationMask], (URM_all.row[validationMask], URM_all.col[validationMask])), shape=URM_shape)
+    URM_validation = URM_validation.tocsr()
 
-    for line in fileHandle:
-        numCells += 1
-        if (numCells % 1000000 == 0):
-            print("Processed {} cells".format(numCells))
 
-        if (len(line)) > 1:
-            line = line.split(separator)
-
-            line[-1] = line[-1].replace("\n", "")
-
-            if not line[2] == "0" and not line[2] == "NaN":
-                rows.append(int(line[0]))
-                cols.append(int(line[1]))
-                values.append(float(line[2]))
-
-    fileHandle.close()
-
-    return  sps.csr_matrix((values, (rows, cols)), dtype=np.float32)
+    return URM_train, URM_validation, URM_test
 
 
 
-def saveSparseIntoCSV (filePath, sparse_matrix, separator=","):
-
-    sparse_matrix = sparse_matrix.tocoo()
-
-    fileHandle = open(filePath, "w")
-
-    for index in range(len(sparse_matrix.data)):
-        fileHandle.write("{row}{separator}{col}{separator}{value}\n".format(
-            row = sparse_matrix.row[index], col = sparse_matrix.col[index], value = sparse_matrix.data[index],
-            separator = separator))
 
 
-import sys, time
+
+import sys, time, pickle
 
 
 def urllretrieve_reporthook(count, block_size, total_size):
@@ -116,11 +89,11 @@ class Movielens10MReader(object):
     DATASET_URL = "http://files.grouplens.org/datasets/movielens/ml-10m.zip"
 
 
-    def __init__(self, splitTrainTest = False, splitTrainTestValidation =[0.6, 0.2, 0.2] , loadPredefinedTrainTest = True):
+    def __init__(self, split_train_test_validation_quota =[0.6, 0.2, 0.2]):
 
         super(Movielens10MReader, self).__init__()
 
-        if sum(splitTrainTestValidation) != 1.0 or len(splitTrainTestValidation) != 3:
+        if sum(split_train_test_validation_quota) != 1.0 or len(split_train_test_validation_quota) != 3:
             raise ValueError("Movielens10MReader: splitTrainTestValidation must be a probability distribution over Train, Test and Validation")
 
         print("Movielens10MReader: loading data...")
@@ -145,60 +118,48 @@ class Movielens10MReader(object):
         URM_path = dataFile.extract("ml-10M100K/ratings.dat", path=dataSubfolder)
 
 
+        try:
+            self.URM_train = sps.load_npz(dataSubfolder + "URM_train.npz")
+            self.URM_test = sps.load_npz(dataSubfolder + "URM_test.npz")
+            self.URM_validation = sps.load_npz(dataSubfolder + "URM_validation.npz")
 
-        if not loadPredefinedTrainTest:
-            self.URM_all = loadCSVintoSparse(URM_path, separator="::")
-            self.URM_all = removeZeroRatingRowAndCol(self.URM_all)
-
-        else:
-
-            try:
-                self.URM_train = sps.load_npz(dataSubfolder + "URM_train.npz")
-                self.URM_test = sps.load_npz(dataSubfolder + "URM_test.npz")
-                self.URM_validation = sps.load_npz(dataSubfolder + "URM_validation.npz")
-
-                return
-
-            except FileNotFoundError:
-                # Rebuild split
-                print("Movielens10MReader: URM_train or URM_test or URM_validation not found. Building new ones")
-
-                splitTrainTest = True
-                self.URM_all = loadCSVintoSparse(URM_path)
-                self.URM_all = removeZeroRatingRowAndCol(self.URM_all)
+            self.column_token_to_id_mapper = pickle.load(open(dataSubfolder + "column_token_to_id_mapper", "rb"))
+            self.row_token_to_id_mapper = pickle.load(open(dataSubfolder + "row_token_to_id_mapper", "rb"))
 
 
+        except FileNotFoundError:
 
-        if splitTrainTest:
+            # Rebuild split
 
-            self.URM_all = self.URM_all.tocoo()
-            URM_shape = self.URM_all.shape
-
-            numInteractions= len(self.URM_all.data)
-
-            split = np.random.choice([1, 2, 3], numInteractions, p=splitTrainTestValidation)
+            print("Movielens10MReader: URM_train or URM_test or URM_validation not found. Building new ones")
 
 
-            trainMask = split == 1
-            self.URM_train = sps.coo_matrix((self.URM_all.data[trainMask], (self.URM_all.row[trainMask], self.URM_all.col[trainMask])), shape=URM_shape)
-            self.URM_train = self.URM_train.tocsr()
+            URM_builder = self._load_URM(URM_path)
 
-            testMask = split == 2
+            URM_all = URM_builder.get_SparseMatrix()
+            self.column_token_to_id_mapper = URM_builder.get_column_token_to_id_mapper()
+            self.row_token_to_id_mapper = URM_builder.get_row_token_to_id_mapper()
 
-            self.URM_test = sps.coo_matrix((self.URM_all.data[testMask], (self.URM_all.row[testMask], self.URM_all.col[testMask])), shape=URM_shape)
-            self.URM_test = self.URM_test.tocsr()
 
-            validationMask = split == 3
 
-            self.URM_validation = sps.coo_matrix((self.URM_all.data[validationMask], (self.URM_all.row[validationMask], self.URM_all.col[validationMask])), shape=URM_shape)
-            self.URM_validation = self.URM_validation.tocsr()
+            ###################################################################
+            ################ SPLIT DATA
 
-            del self.URM_all
+            self.URM_train, self.URM_test, self.URM_validation = split_train_validation_test(URM_all, split_train_test_validation_quota)
+
+
+            ###################################################################
+            ################ SAVE SPLIT
+
 
             print("Movielens10MReader: saving URM_train and URM_test")
             sps.save_npz(dataSubfolder + "URM_train.npz", self.URM_train)
             sps.save_npz(dataSubfolder + "URM_test.npz", self.URM_test)
             sps.save_npz(dataSubfolder + "URM_validation.npz", self.URM_validation)
+
+
+            pickle.dump(self.column_token_to_id_mapper, open(dataSubfolder + "column_token_to_id_mapper", "wb"), protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump(self.row_token_to_id_mapper, open(dataSubfolder + "row_token_to_id_mapper", "wb"), protocol=pickle.HIGHEST_PROTOCOL)
 
         print("Movielens10MReader: loading complete")
 
@@ -213,3 +174,41 @@ class Movielens10MReader(object):
 
     def get_URM_validation(self):
         return self.URM_validation
+
+
+
+
+    def _load_URM (self, filePath, header = False, separator="::"):
+
+        URM_builder = IncrementalSparseMatrix(auto_create_col_mapper=True, auto_create_row_mapper=True)
+
+        fileHandle = open(filePath, "r")
+        numCells = 0
+
+        if header:
+            fileHandle.readline()
+
+        for line in fileHandle:
+            numCells += 1
+
+            if (numCells % 1000000 == 0):
+                print("Processed {} cells".format(numCells))
+
+            if (len(line)) > 1:
+                line = line.split(separator)
+
+                line[-1] = line[-1].replace("\n", "")
+
+                if not line[2] == "0" and not line[2] == "NaN":
+
+                    user_id = line[0]
+                    item_id = line[1]
+                    rating = float(line[2])
+
+                    URM_builder.add_data_lists([user_id], [item_id], [rating])
+
+
+        fileHandle.close()
+
+
+        return  URM_builder

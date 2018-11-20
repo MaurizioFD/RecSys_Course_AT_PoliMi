@@ -15,7 +15,7 @@ from GraphBased.P3alphaRecommender import P3alphaRecommender
 
 from data.Movielens_10M.Movielens10MReader import Movielens10MReader
 
-import traceback
+import traceback, os
 
 
 if __name__ == '__main__':
@@ -47,8 +47,14 @@ if __name__ == '__main__':
     evaluator = SequentialEvaluator(URM_test, [5, 20], exclude_seen=True)
 
 
+    output_root_path = "result_experiments/"
 
-    logFile = open("result_all_algorithms.txt", "a")
+    # If directory does not exist, create
+    if not os.path.exists(output_root_path):
+        os.makedirs(output_root_path)
+
+
+    logFile = open(output_root_path + "result_all_algorithms.txt", "a")
 
 
     for recommender_class in recommender_list:
