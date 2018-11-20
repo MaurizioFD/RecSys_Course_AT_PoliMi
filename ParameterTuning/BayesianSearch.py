@@ -52,7 +52,7 @@ class BayesianSearch(AbstractClassSearch):
 
 
 
-    def search(self, dictionary, metric ="MAP", n_cases = 30, output_root_path = None, parallelPoolSize = 2, parallelize = True,
+    def search(self, dictionary, metric ="MAP", init_points = 5, n_cases = 30, output_root_path = None, parallelPoolSize = 2, parallelize = True,
                save_model = "best"):
 
         # Associate the params that will be returned by BayesianOpt object to those you want to save
@@ -126,7 +126,7 @@ class BayesianSearch(AbstractClassSearch):
         #self.best_solution_object = None
 
 
-        self.bayesian_optimizer.maximize(init_points=5, n_iter=n_cases, kappa=2)
+        self.bayesian_optimizer.maximize(init_points=init_points, n_iter=n_cases, kappa=2)
 
         best_solution = self.bayesian_optimizer.res['max']
 
@@ -256,6 +256,10 @@ class BayesianSearch(AbstractClassSearch):
 
                 pickle.dump(paramether_dictionary_to_save.copy(),
                             open(self.output_root_path + "_best_parameters", "wb"),
+                            protocol=pickle.HIGHEST_PROTOCOL)
+
+                pickle.dump(result_dict.copy(),
+                            open(self.output_root_path + "_best_result_validation", "wb"),
                             protocol=pickle.HIGHEST_PROTOCOL)
 
                 self.best_solution_val = result_dict[metric]

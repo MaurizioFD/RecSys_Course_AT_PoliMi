@@ -135,7 +135,7 @@ class SLIM_BPR_Cython(SimilarityMatrixRecommender, Recommender, Incremental_Trai
         else:
             self.validation_every_n = np.inf
 
-        if evaluator_object is None:
+        if evaluator_object is None and stop_on_validation:
             evaluator_object = SequentialEvaluator(self.URM_validation, [5])
 
 

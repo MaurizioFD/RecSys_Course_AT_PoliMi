@@ -48,8 +48,9 @@ cdef class Compute_Similarity_Cython:
     cdef int[:] user_to_item_row_ptr, user_to_item_cols
     cdef int[:] item_to_user_rows, item_to_user_col_ptr
     cdef double[:] user_to_item_data, item_to_user_data
-    cdef double[:] sumOfSquared
-    cdef int shrink, normalize, adjusted_cosine, pearson_correlation, tanimoto_coefficient
+    cdef double[:] sumOfSquared, sumOfSquared_to_1_minus_alpha, sumOfSquared_to_alpha
+    cdef int shrink, normalize, adjusted_cosine, pearson_correlation, tanimoto_coefficient, asymmetric_cosine, dice_coefficient, tversky_coefficient
+    cdef float asymmetric_alpha, tversky_alpha, tversky_beta
 
     cdef int use_row_weights
     cdef double[:] row_weights
@@ -57,6 +58,7 @@ cdef class Compute_Similarity_Cython:
     cdef double[:,:] W_dense
 
     def __init__(self, dataMatrix, topK = 100, shrink=0, normalize = True,
+                 asymmetric_alpha = 0.5, tversky_alpha = 1.0, tversky_beta = 1.0,
                  similarity = "cosine", row_weights = None):
         """
         Computes the cosine similarity on the columns of dataMatrix
@@ -67,12 +69,21 @@ cdef class Compute_Similarity_Cython:
         :param shrink:
         :param normalize:           If True divide the dot product by the product of the norms
         :param row_weights:         Multiply the values in each row by a specified value. Array
-        :param similarity:  "cosine"    computes Cosine similarity
-                            "adjusted"  computes Adjusted Cosine, removing the average of the users
-                            "pearson"   computes Pearson Correlation, removing the average of the items
-                            "jaccard"   computes Jaccard similarity for binary interactions using Tanimoto
-                            "tanimoto"  computes Tanimoto coefficient for binary interactions
+        :param asymmetric_alpha     Coefficient alpha for the asymmetric cosine
+        :param similarity:  "cosine"        computes Cosine similarity
+                            "adjusted"      computes Adjusted Cosine, removing the average of the users
+                            "asymmetric"    computes Asymmetric Cosine
+                            "pearson"       computes Pearson Correlation, removing the average of the items
+                            "jaccard"       computes Jaccard similarity for binary interactions using Tanimoto
+                            "dice"          computes Dice similarity for binary interactions
+                            "tversky"       computes Tversky similarity for binary interactions
+                            "tanimoto"      computes Tanimoto coefficient for binary interactions
 
+        """
+        """
+        Asymmetric Cosine as described in: 
+        Aiolli, F. (2013, October). Efficient top-n recommendation for very large scale binary rated datasets. In Proceedings of the 7th ACM conference on Recommender systems (pp. 273-280). ACM.
+        
         """
 
         super(Compute_Similarity_Cython, self).__init__()
@@ -81,13 +92,21 @@ cdef class Compute_Similarity_Cython:
         self.n_rows = dataMatrix.shape[0]
         self.shrink = shrink
         self.normalize = normalize
+        self.asymmetric_alpha = asymmetric_alpha
+        self.tversky_alpha = tversky_alpha
+        self.tversky_beta = tversky_beta
 
         self.adjusted_cosine = False
+        self.asymmetric_cosine = False
         self.pearson_correlation = False
         self.tanimoto_coefficient = False
+        self.dice_coefficient = False
+        self.tversky_coefficient = False
 
         if similarity == "adjusted":
             self.adjusted_cosine = True
+        elif similarity == "asymmetric":
+            self.asymmetric_cosine = True
         elif similarity == "pearson":
             self.pearson_correlation = True
         elif similarity == "jaccard" or similarity == "tanimoto":
@@ -95,11 +114,20 @@ cdef class Compute_Similarity_Cython:
             # Tanimoto has a specific kind of normalization
             self.normalize = False
 
+        elif similarity == "dice":
+            self.dice_coefficient = True
+            self.normalize = False
+
+        elif similarity == "tversky":
+            self.tversky_coefficient = True
+            self.normalize = False
+
         elif similarity == "cosine":
             pass
         else:
             raise ValueError("Cosine_Similarity: value for paramether 'mode' not recognized."
-                             " Allowed values are: 'cosine', 'pearson', 'adjusted', 'jaccard', 'tanimoto'."
+                             " Allowed values are: 'cosine', 'pearson', 'adjusted', 'asymmetric', 'jaccard', 'tanimoto',"
+                             "dice, tversky."
                              " Passed value was '{}'".format(similarity))
 
 
@@ -120,7 +148,7 @@ cdef class Compute_Similarity_Cython:
             dataMatrix = self.applyAdjustedCosine(dataMatrix)
         elif self.pearson_correlation:
             dataMatrix = self.applyPearsonCorrelation(dataMatrix)
-        elif self.tanimoto_coefficient:
+        elif self.tanimoto_coefficient or self.dice_coefficient or self.tversky_coefficient:
             dataMatrix = self.useOnlyBooleanInteractions(dataMatrix)
 
 
@@ -129,8 +157,12 @@ cdef class Compute_Similarity_Cython:
         self.sumOfSquared = np.array(dataMatrix.power(2).sum(axis=0), dtype=np.float64).ravel()
 
         # Tanimoto does not require the square root to be applied
-        if not self.tanimoto_coefficient:
+        if not (self.tanimoto_coefficient or self.dice_coefficient or self.tversky_coefficient):
             self.sumOfSquared = np.sqrt(self.sumOfSquared)
+
+        if self.asymmetric_cosine:
+            self.sumOfSquared_to_1_minus_alpha = np.power(self.sumOfSquared, 2 * (1 - self.asymmetric_alpha))
+            self.sumOfSquared_to_alpha = np.power(self.sumOfSquared, 2 * self.asymmetric_alpha)
 
 
         # Apply weight after sumOfSquared has been computed but before the matrix is
@@ -471,14 +503,32 @@ cdef class Compute_Similarity_Cython:
             # Apply normalization and shrinkage, ensure denominator != 0
             if self.normalize:
                 for innerItemIndex in range(self.n_columns):
-                    self.this_item_weights[innerItemIndex] /= self.sumOfSquared[itemIndex] * self.sumOfSquared[innerItemIndex]\
-                                                         + self.shrink + 1e-6
+
+                    if self.asymmetric_cosine:
+                        self.this_item_weights[innerItemIndex] /= self.sumOfSquared_to_alpha[itemIndex] * self.sumOfSquared_to_1_minus_alpha[innerItemIndex]\
+                                                             + self.shrink + 1e-6
+
+                    else:
+                        self.this_item_weights[innerItemIndex] /= self.sumOfSquared[itemIndex] * self.sumOfSquared[innerItemIndex]\
+                                                             + self.shrink + 1e-6
 
             # Apply the specific denominator for Tanimoto
             elif self.tanimoto_coefficient:
                 for innerItemIndex in range(self.n_columns):
                     self.this_item_weights[innerItemIndex] /= self.sumOfSquared[itemIndex] + self.sumOfSquared[innerItemIndex] -\
                                                          self.this_item_weights[innerItemIndex] + self.shrink + 1e-6
+
+            elif self.dice_coefficient:
+                for innerItemIndex in range(self.n_columns):
+                    self.this_item_weights[innerItemIndex] /= self.sumOfSquared[itemIndex] + self.sumOfSquared[innerItemIndex] +\
+                                                         self.shrink + 1e-6
+
+            elif self.tversky_coefficient:
+                for innerItemIndex in range(self.n_columns):
+                    self.this_item_weights[innerItemIndex] /= self.this_item_weights[innerItemIndex] + \
+                                                              (self.sumOfSquared[itemIndex]-self.this_item_weights[innerItemIndex])*self.tversky_alpha + \
+                                                              (self.sumOfSquared[innerItemIndex]-self.this_item_weights[innerItemIndex])*self.tversky_beta +\
+                                                              self.shrink + 1e-6
 
             elif self.shrink != 0:
                 for innerItemIndex in range(self.n_columns):
@@ -502,29 +552,6 @@ cdef class Compute_Similarity_Cython:
                 # - Sort only the TopK items, discarding the rest
                 # - Get the original item index
                 #
-                # this_item_weights_np = - np.array(self.this_item_weights)
-                # #
-                # # Get the unordered set of topK items
-                # top_k_partition = np.argpartition(this_item_weights_np, self.TopK-1)[0:self.TopK]
-                # # Sort only the elements in the partition
-                # top_k_partition_sorting = np.argsort(this_item_weights_np[top_k_partition])
-                # # Get original index
-                # top_k_idx = top_k_partition[top_k_partition_sorting]
-                #
-                #
-                #
-                # # Incrementally build sparse matrix, do not add zeros
-                # for innerItemIndex in range(len(top_k_idx)):
-                #
-                #     topKItemIndex = top_k_idx[innerItemIndex]
-                #
-                #     if this_item_weights[topKItemIndex] != 0.0:
-                #
-                #         values[sparse_data_pointer] = this_item_weights[topKItemIndex]
-                #         rows[sparse_data_pointer] = topKItemIndex
-                #         cols[sparse_data_pointer] = itemIndex
-                #
-                #         sparse_data_pointer += 1
 
 
 

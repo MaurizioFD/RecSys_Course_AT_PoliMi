@@ -73,19 +73,14 @@ class PureSVDRecommender(Recommender):
 
 
 
-
-
-
-    def saveModel(self, folder_path, file_name = None, forceSparse = True):
-
+    def saveModel(self, folder_path, file_name = None):
+        
         import pickle
-
-        print("{}: Saving model in folder '{}'".format(self.RECOMMENDER_NAME, folder_path))
 
         if file_name is None:
             file_name = self.RECOMMENDER_NAME
 
-        file_name += "_"
+        print("{}: Saving model in file '{}'".format(self.RECOMMENDER_NAME, folder_path + file_name))
 
         data_dict = {
             "U":self.U,
@@ -94,24 +89,12 @@ class PureSVDRecommender(Recommender):
             "s_Vt":self.s_Vt
         }
 
+
         pickle.dump(data_dict,
-                    open(folder_path + file_name + "model", "wb"),
+                    open(folder_path + file_name, "wb"),
                     protocol=pickle.HIGHEST_PROTOCOL)
 
 
+        print("{}: Saving complete")
 
-    def loadModel(self, folderPath, namePrefix = None, forceSparse = True):
 
-        import pickle
-
-        print("{}: Loading model from folder '{}'".format(self.RECOMMENDER_NAME, folderPath))
-
-        if namePrefix is None:
-            namePrefix = self.RECOMMENDER_NAME
-
-        namePrefix += "_"
-
-        data_dict = pickle.load(open(folderPath + namePrefix + "model", "rb"))
-
-        for attrib_name in data_dict.keys():
-             self.__setattr__(attrib_name, data_dict[attrib_name])

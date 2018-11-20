@@ -32,6 +32,9 @@ class Recommender(object):
     def fit(self):
         pass
 
+    def get_URM_train(self):
+        return self.URM_train.copy()
+
 
     def set_items_to_ignore(self, items_to_ignore):
 

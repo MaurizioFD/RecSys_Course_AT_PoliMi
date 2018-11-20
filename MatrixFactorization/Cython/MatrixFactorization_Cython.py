@@ -74,7 +74,7 @@ class MatrixFactorization_Cython(Recommender, Incremental_Training_Early_Stoppin
         self.batch_size = batch_size
         self.learning_rate = learning_rate
 
-        if evaluator_object is None:
+        if evaluator_object is None and stop_on_validation:
             evaluator_object = SequentialEvaluator(self.URM_validation, [5])
 
 

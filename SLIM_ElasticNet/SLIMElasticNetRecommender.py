@@ -25,6 +25,7 @@ class SLIMElasticNetRecommender(SimilarityMatrixRecommender, Recommender):
     See:
         Efficient Top-N Recommendation by Linear Regression,
         M. Levy and K. Jack, LSRS workshop at RecSys 2013.
+        https://www.slideshare.net/MarkLevy/efficient-slides
 
         SLIM: Sparse linear methods for top-n recommender systems,
         X. Ning and G. Karypis, ICDM 2011.

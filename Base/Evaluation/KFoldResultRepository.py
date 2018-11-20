@@ -71,7 +71,7 @@ def compute_k_fold_significance(list_1, alpha, *other_lists):
         else:
             significance = "Is NOT significant."
 
-        print("List {} paired t_statistic: {:.4f}, p_value: {:.4f}, alpha: {:.4f}. {}".format(other_list_index+2, t_statistic, p_value, alpha, significance))
+        print("List {} paired t_statistic: {:.4f}, p_value: {:.4f}, alpha: {:.4f}. {}\n".format(other_list_index+2, t_statistic, p_value, alpha, significance))
 
 
 

@@ -34,7 +34,7 @@ class ItemKNNCBFRecommender(SimilarityMatrixRecommender, Recommender):
         self.sparse_weights = sparse_weights
 
 
-    def fit(self, topK=50, shrink=100, similarity='cosine', normalize=True, feature_weighting = "none"):
+    def fit(self, topK=50, shrink=100, similarity='cosine', normalize=True, feature_weighting = "none", **similarity_args):
 
         self.topK = topK
         self.shrink = shrink
@@ -52,7 +52,7 @@ class ItemKNNCBFRecommender(SimilarityMatrixRecommender, Recommender):
             self.ICM = TF_IDF(self.ICM)
 
 
-        similarity = Compute_Similarity(self.ICM.T, shrink=shrink, topK=topK, normalize=normalize, similarity = similarity)
+        similarity = Compute_Similarity(self.ICM.T, shrink=shrink, topK=topK, normalize=normalize, similarity = similarity, **similarity_args)
 
 
         if self.sparse_weights:

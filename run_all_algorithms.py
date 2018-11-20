@@ -10,8 +10,10 @@ from Base.NonPersonalizedRecommender import TopPop, Random
 from KNN.UserKNNCFRecommender import UserKNNCFRecommender
 from KNN.ItemKNNCFRecommender import ItemKNNCFRecommender
 from KNN.ItemKNNCBFRecommender import ItemKNNCBFRecommender
+from GraphBased.RP3betaRecommender import RP3betaRecommender
+from GraphBased.P3alphaRecommender import P3alphaRecommender
 
-from data.Movielens10MReader import Movielens10MReader
+from data.Movielens_10M.Movielens10MReader import Movielens10MReader
 
 import traceback
 
@@ -26,16 +28,19 @@ if __name__ == '__main__':
     URM_test = dataReader.get_URM_test()
 
     recommender_list = [
-        Random(URM_train),
-        TopPop(URM_train),
-        ItemKNNCFRecommender(URM_train),
-        UserKNNCFRecommender(URM_train),
-        MatrixFactorization_BPR_Cython(URM_train),
-        MatrixFactorization_FunkSVD_Cython(URM_train),
-        PureSVDRecommender(URM_train),
-        SLIM_BPR_Cython(URM_train),
-        SLIMElasticNetRecommender(URM_train)
+        Random,
+        TopPop,
+        P3alphaRecommender,
+        RP3betaRecommender,
+        ItemKNNCFRecommender,
+        UserKNNCFRecommender,
+        MatrixFactorization_BPR_Cython,
+        MatrixFactorization_FunkSVD_Cython,
+        PureSVDRecommender,
+        SLIM_BPR_Cython,
+        SLIMElasticNetRecommender
         ]
+
 
     from Base.Evaluation.Evaluator import SequentialEvaluator
 
@@ -46,20 +51,23 @@ if __name__ == '__main__':
     logFile = open("result_all_algorithms.txt", "a")
 
 
-    for recommender in recommender_list:
+    for recommender_class in recommender_list:
 
         try:
 
-            print("Algorithm: {}".format(recommender.__class__))
+            print("Algorithm: {}".format(recommender_class))
 
+
+            recommender = recommender_class(URM_train)
             recommender.fit()
 
             results_run, results_run_string = evaluator.evaluateRecommender(recommender)
 
             print("Algorithm: {}, results: \n{}".format(recommender.__class__, results_run_string))
-            logFile.write("Algorithm: {}, results: \n{}".format(recommender.__class__, results_run_string))
+            logFile.write("Algorithm: {}, results: \n{}\n".format(recommender.__class__, results_run_string))
             logFile.flush()
 
         except Exception as e:
             traceback.print_exc()
-            logFile.write("Algorithm: {} - Exception: {}\n".format(recommender.__class__, str(e)))
+            logFile.write("Algorithm: {} - Exception: {}\n".format(recommender_class, str(e)))
+            logFile.flush()

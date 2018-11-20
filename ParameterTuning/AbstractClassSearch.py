@@ -204,7 +204,7 @@ class AbstractClassSearch(object):
                                              **self.dictionary_input[DictionaryKeys.CONSTRUCTOR_KEYWORD_ARGS])
 
         if self.save_model != "no":
-            recommender.loadModel(self.output_root_path, file_name = self.recommender_class.RECOMMENDER_NAME + "_best_model")
+            recommender.loadModel(self.output_root_path, file_name = "_best_model")
 
         else:
             recommender.fit(*self.dictionary_input[DictionaryKeys.FIT_POSITIONAL_ARGS],
@@ -212,11 +212,14 @@ class AbstractClassSearch(object):
                             **self.best_solution_parameters)
 
 
-        result_dict, _ = self.evaluator_test.evaluateRecommender(recommender, self.best_solution_parameters)
+        result_dict, result_string = self.evaluator_test.evaluateRecommender(recommender, self.best_solution_parameters)
         result_dict = result_dict[list(result_dict.keys())[0]]
 
+        pickle.dump(result_dict.copy(),
+                    open(self.output_root_path + "_best_result_test", "wb"),
+                    protocol=pickle.HIGHEST_PROTOCOL)
 
-        writeLog(self.ALGORITHM_NAME + ": Best result evaluated on URM_test. Config: {} - results: {}\n".format(self.best_solution_parameters, result_dict), self.logFile)
+        writeLog(self.ALGORITHM_NAME + ": Best result evaluated on URM_test. Config: {} - results: {}\n".format(self.best_solution_parameters, result_string), self.logFile)
 
         return result_dict
 

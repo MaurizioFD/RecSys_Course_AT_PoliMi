@@ -80,17 +80,20 @@ class Coverage_User(Metrics_Object):
 
 
 
-class Gini_Index(Metrics_Object):
+class Gini_Diversity(Metrics_Object):
     """
+    Gini diversity index, computed from the Gini Index but with inverted range, such that high values mean higher diversity
+    This implementation ignores zero-occurrence items
+
     # From https://github.com/oliviaguest/gini
     # based on bottom eq: http://www.statsdirect.com/help/content/image/stat0206_wmf.gif
     # from: http://www.statsdirect.com/help/default.htm#nonparametric_methods/gini.htm
     #
-    # This Gini Index ignores items with NO occurrence
+    # http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.459.8174&rep=rep1&type=pdf
     """
 
     def __init__(self, n_items, ignore_items):
-        super(Gini_Index, self).__init__()
+        super(Gini_Diversity, self).__init__()
         self.recommended_counter = np.zeros(n_items, dtype=np.float)
         self.ignore_items = ignore_items.astype(np.int).copy()
 
@@ -112,12 +115,13 @@ class Gini_Index(Metrics_Object):
         recommended_counter_sorted = np.sort(recommended_counter)       # values must be sorted
         index = np.arange(1, n_items+1)                                 # index per array element
 
-        gini_index = (np.sum((2 * index - n_items  - 1) * recommended_counter_sorted)) / (n_items * np.sum(recommended_counter_sorted))
+        #gini_index = (np.sum((2 * index - n_items  - 1) * recommended_counter_sorted)) / (n_items * np.sum(recommended_counter_sorted))
+        gini_diversity = 2*np.sum((n_items + 1 - index)/(n_items+1) * recommended_counter_sorted/np.sum(recommended_counter_sorted))
 
-        return gini_index
+        return gini_diversity
 
     def merge_with_other(self, other_metric_object):
-        assert other_metric_object is Gini_Index, "Gini_Index: attempting to merge with a metric object of different type"
+        assert other_metric_object is Gini_Diversity, "Gini_Diversity: attempting to merge with a metric object of different type"
 
         self.recommended_counter += other_metric_object.recommended_counter
 
@@ -126,6 +130,14 @@ class Gini_Index(Metrics_Object):
 
 class Diversity_Herfindahl(Metrics_Object):
     """
+    The Herfindahl index is also known as Concentration index, it is used in economy to determine whether the market quotas
+    are such that an excessive concentration exists. It is here used as a diversity index, if high means high diversity.
+
+    It is known to have a small value range in recommender systems, between 0.9 and 1.0
+
+    The Herfindahl index is a function of the square of the probability an item has been recommended to any user, hence
+    The Herfindahl index is equivalent to MeanInterList diversity as they measure the same quantity.
+
     # http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.459.8174&rep=rep1&type=pdf
     """
 
@@ -161,6 +173,17 @@ class Diversity_Herfindahl(Metrics_Object):
 
 class Shannon_Entropy(Metrics_Object):
     """
+    Shannon Entropy is a well known metric to measure the amount of information of a certain string of data.
+    Here is applied to the global number of times an item has been recommended.
+
+    It has a lower bound and can reach values over 12.0 for random recommenders.
+    A high entropy means that the distribution is random uniform across all users.
+
+    Note that while a random uniform distribution
+    (hence all items with SIMILAR number of occurrences)
+    will be highly diverse and have high entropy, a perfectly uniform distribution
+    (hence all items with EXACTLY IDENTICAL number of occurrences)
+    will have 0.0 entropy while being the most diverse possible.
 
     """
 
@@ -195,7 +218,7 @@ class Shannon_Entropy(Metrics_Object):
         return shannon_entropy
 
     def merge_with_other(self, other_metric_object):
-        assert other_metric_object is Gini_Index, "Shannon_Entropy: attempting to merge with a metric object of different type"
+        assert other_metric_object is Gini_Diversity, "Shannon_Entropy: attempting to merge with a metric object of different type"
 
         assert np.all(self.recommended_counter >= 0.0), "Shannon_Entropy: self.recommended_counter contains negative counts"
         assert np.all(other_metric_object.recommended_counter >= 0.0), "Shannon_Entropy: other.recommended_counter contains negative counts"
@@ -212,9 +235,14 @@ import scipy.sparse as sps
 
 class Novelty(Metrics_Object):
     """
+    Novelty measures how "novel" a recommendation is in terms of how popular the item was in the train set.
+
+    Due to this definition, the novelty of a cold item (i.e. with no interactions in the train set) is not defined,
+    in this implementation cold items are ignored and their contribution to the novelty is 0.
+
+    A recommender with high novelty will be able to recommend also long queue (i.e. unpopular) items.
+
     Mean self-information  (Zhou 2010)
-    Computed via the log popularity of recommended items
-    Cannot be used to compute novelty of cold items
     """
 
     def __init__(self, URM_train):
@@ -261,8 +289,13 @@ class Novelty(Metrics_Object):
 
 class Diversity_similarity(Metrics_Object):
     """
-    Intra-list diversity
-    Computes the diversity by using an item_diversity_matrix
+    Intra list diversity computes the diversity of items appearing in the recommendations received by each single user, by using an item_diversity_matrix.
+
+    It can be used, for example, to compute the diversity in terms of features for a collaborative recommender.
+
+    A content-based recommender will have low IntraList diversity if that is computed on the same features the recommender uses.
+    A TopPopular recommender may exhibit high IntraList diversity.
+
     """
 
     def __init__(self, item_diversity_matrix):
@@ -314,7 +347,22 @@ class Diversity_similarity(Metrics_Object):
 
 class Diversity_MeanInterList(Metrics_Object):
     """
-    uniqueness of different users recommendation lists
+    MeanInterList diversity measures the uniqueness of different users' recommendation lists.
+
+    It can be used to measure how "diversified" are the recommendations different users receive.
+
+    While the original proposal called this metric "Personalization", we do not use this name since the highest MeanInterList diversity
+    is exhibited by a non personalized Random recommender.
+
+    It can be demonstrated that this metric does not require to compute the common items all possible couples of users have in common
+    but rather it is only sensitive to the total amount of time each item has been recommended.
+
+    MeanInterList diversity is a function of the square of the probability an item has been recommended to any user, hence
+    MeanInterList diversity is equivalent to the Herfindahl index as they measure the same quantity.
+
+    A TopPopular recommender that does not remove seen items will have 0.0 MeanInterList diversity.
+
+
     pag. 3, http://www.pnas.org/content/pnas/107/10/4511.full.pdf
 
     @article{zhou2010solving,
@@ -395,10 +443,10 @@ class Diversity_MeanInterList(Metrics_Object):
 
     def merge_with_other(self, other_metric_object):
 
-        assert other_metric_object is Diversity_MeanInterList, "Diversity_personalization: attempting to merge with a metric object of different type"
+        assert other_metric_object is Diversity_MeanInterList, "Diversity_MeanInterList: attempting to merge with a metric object of different type"
 
-        assert np.all(self.recommended_counter >= 0.0), "Diversity_personalization: self.recommended_counter contains negative counts"
-        assert np.all(other_metric_object.recommended_counter >= 0.0), "Diversity_personalization: other.recommended_counter contains negative counts"
+        assert np.all(self.recommended_counter >= 0.0), "Diversity_MeanInterList: self.recommended_counter contains negative counts"
+        assert np.all(other_metric_object.recommended_counter >= 0.0), "Diversity_MeanInterList: other.recommended_counter contains negative counts"
 
         self.recommended_counter += other_metric_object.recommended_counter
         self.n_evaluated_users += other_metric_object.n_evaluated_users
@@ -408,17 +456,20 @@ class Diversity_MeanInterList(Metrics_Object):
 
 
 def roc_auc(is_relevant):
-    #is_relevant = np.in1d(ranked_list, pos_items, assume_unique=True)
+
     ranks = np.arange(len(is_relevant))
     pos_ranks = ranks[is_relevant]
     neg_ranks = ranks[~is_relevant]
     auc_score = 0.0
+
     if len(neg_ranks) == 0:
         return 1.0
+
     if len(pos_ranks) > 0:
         for pos_pred in pos_ranks:
             auc_score += np.sum(pos_pred < neg_ranks, dtype=np.float32)
         auc_score /= (pos_ranks.shape[0] * neg_ranks.shape[0])
+
     assert 0 <= auc_score <= 1, auc_score
     return auc_score
 
@@ -438,27 +489,37 @@ def arhr(is_relevant):
 
 
 
-def precision(is_relevant):
-    #ranked_list = ranked_list[:at]
-    #is_relevant = np.in1d(is_relevant, pos_items, assume_unique=True)
-    precision_score = np.sum(is_relevant, dtype=np.float32) / len(is_relevant)
+def precision(is_relevant, n_test_items):
+
+    precision_score = np.sum(is_relevant, dtype=np.float32) / min(n_test_items, len(is_relevant))
+
     assert 0 <= precision_score <= 1, precision_score
     return precision_score
 
 
+
+def recall_min_test_len(is_relevant, pos_items):
+
+    recall_score = np.sum(is_relevant, dtype=np.float32) / min(pos_items.shape[0], len(is_relevant))
+
+    assert 0 <= recall_score <= 1, recall_score
+    return recall_score
+
+
+
 def recall(is_relevant, pos_items):
-    #ranked_list = ranked_list[:at]
-    #is_relevant = np.in1d(ranked_list, pos_items, assume_unique=True)
+
     recall_score = np.sum(is_relevant, dtype=np.float32) / pos_items.shape[0]
+
     assert 0 <= recall_score <= 1, recall_score
     return recall_score
 
 
 def rr(is_relevant):
     # reciprocal rank of the FIRST relevant item in the ranked list (0 if none)
-    #ranked_list = ranked_list[:at]
-    #is_relevant = np.in1d(ranked_list, pos_items, assume_unique=True)
+
     ranks = np.arange(1, len(is_relevant) + 1)[is_relevant]
+
     if len(ranks) > 0:
         return 1. / ranks[0]
     else:
@@ -466,23 +527,31 @@ def rr(is_relevant):
 
 
 def map(is_relevant, pos_items):
-    #ranked_list = ranked_list[:at]
-    #is_relevant = np.in1d(ranked_list, pos_items, assume_unique=True)
+
     p_at_k = is_relevant * np.cumsum(is_relevant, dtype=np.float32) / (1 + np.arange(is_relevant.shape[0]))
     map_score = np.sum(p_at_k) / np.min([pos_items.shape[0], is_relevant.shape[0]])
+
     assert 0 <= map_score <= 1, map_score
     return map_score
 
 
 def ndcg(ranked_list, pos_items, relevance=None, at=None):
+
     if relevance is None:
         relevance = np.ones_like(pos_items)
     assert len(relevance) == pos_items.shape[0]
 
     # Create a dictionary associating item_id to its relevance
+    # it2rel[item] -> relevance[item]
     it2rel = {it: r for it, r in zip(pos_items, relevance)}
+
+    # Creates array of length "at" with the relevance associated to the item in that position
     rank_scores = np.asarray([it2rel.get(it, 0.0) for it in ranked_list[:at]], dtype=np.float32)
+
+    # IDCG has all relevances to 1, up to the number of items in the test set
     ideal_dcg = dcg(np.sort(relevance)[::-1])
+
+    # DCG uses the relevance of the recommended items
     rank_dcg = dcg(rank_scores)
 
     if rank_dcg == 0.0:

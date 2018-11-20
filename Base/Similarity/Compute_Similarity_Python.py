@@ -17,6 +17,7 @@ class Compute_Similarity_Python:
 
 
     def __init__(self, dataMatrix, topK=100, shrink = 0, normalize = True,
+                 asymmetric_alpha = 0.5, tversky_alpha = 1.0, tversky_beta = 1.0,
                  similarity = "cosine", row_weights = None):
         """
         Computes the cosine similarity on the columns of dataMatrix
@@ -27,12 +28,21 @@ class Compute_Similarity_Python:
         :param shrink:
         :param normalize:           If True divide the dot product by the product of the norms
         :param row_weights:         Multiply the values in each row by a specified value. Array
-        :param similarity:  "cosine"    computes Cosine similarity
-                            "adjusted"  computes Adjusted Cosine, removing the average of the users
-                            "pearson"   computes Pearson Correlation, removing the average of the items
-                            "jaccard"   computes Jaccard similarity for binary interactions using Tanimoto
-                            "tanimoto"  computes Tanimoto coefficient for binary interactions
+        :param asymmetric_alpha     Coefficient alpha for the asymmetric cosine
+        :param similarity:  "cosine"        computes Cosine similarity
+                            "adjusted"      computes Adjusted Cosine, removing the average of the users
+                            "asymmetric"    computes Asymmetric Cosine
+                            "pearson"       computes Pearson Correlation, removing the average of the items
+                            "jaccard"       computes Jaccard similarity for binary interactions using Tanimoto
+                            "dice"          computes Dice similarity for binary interactions
+                            "tversky"       computes Tversky similarity for binary interactions
+                            "tanimoto"      computes Tanimoto coefficient for binary interactions
 
+        """
+        """
+        Asymmetric Cosine as described in: 
+        Aiolli, F. (2013, October). Efficient top-n recommendation for very large scale binary rated datasets. In Proceedings of the 7th ACM conference on Recommender systems (pp. 273-280). ACM.
+        
         """
 
         super(Compute_Similarity_Python, self).__init__()
@@ -42,15 +52,23 @@ class Compute_Similarity_Python:
         self.normalize = normalize
         self.n_columns = dataMatrix.shape[1]
         self.n_rows = dataMatrix.shape[0]
+        self.asymmetric_alpha = asymmetric_alpha
+        self.tversky_alpha = tversky_alpha
+        self.tversky_beta = tversky_beta
 
         self.dataMatrix = dataMatrix.copy()
 
         self.adjusted_cosine = False
+        self.asymmetric_cosine = False
         self.pearson_correlation = False
         self.tanimoto_coefficient = False
+        self.dice_coefficient = False
+        self.tversky_coefficient = False
 
         if similarity == "adjusted":
             self.adjusted_cosine = True
+        elif similarity == "asymmetric":
+            self.asymmetric_cosine = True
         elif similarity == "pearson":
             self.pearson_correlation = True
         elif similarity == "jaccard" or similarity == "tanimoto":
@@ -58,11 +76,20 @@ class Compute_Similarity_Python:
             # Tanimoto has a specific kind of normalization
             self.normalize = False
 
+        elif similarity == "dice":
+            self.dice_coefficient = True
+            self.normalize = False
+
+        elif similarity == "tversky":
+            self.tversky_coefficient = True
+            self.normalize = False
+
         elif similarity == "cosine":
             pass
         else:
             raise ValueError("Cosine_Similarity: value for paramether 'mode' not recognized."
-                             " Allowed values are: 'cosine', 'pearson', 'adjusted', 'jaccard', 'tanimoto'."
+                             " Allowed values are: 'cosine', 'pearson', 'adjusted', 'asymmetric', 'jaccard', 'tanimoto',"
+                             "dice, tversky."
                              " Passed value was '{}'".format(similarity))
 
 
@@ -206,7 +233,7 @@ class Compute_Similarity_Python:
         elif self.pearson_correlation:
             self.applyPearsonCorrelation()
 
-        elif self.tanimoto_coefficient:
+        elif self.tanimoto_coefficient or self.dice_coefficient or self.tversky_coefficient:
             self.useOnlyBooleanInteractions()
 
 
@@ -218,8 +245,12 @@ class Compute_Similarity_Python:
         sumOfSquared = np.array(self.dataMatrix.power(2).sum(axis=0)).ravel()
 
         # Tanimoto does not require the square root to be applied
-        if not self.tanimoto_coefficient:
+        if not (self.tanimoto_coefficient or self.dice_coefficient or self.tversky_coefficient):
             sumOfSquared = np.sqrt(sumOfSquared)
+
+        if self.asymmetric_cosine:
+            sumOfSquared_to_1_minus_alpha = np.power(sumOfSquared, 2 * (1 - self.asymmetric_alpha))
+            sumOfSquared_to_alpha = np.power(sumOfSquared, 2 * self.asymmetric_alpha)
 
 
         self.dataMatrix = check_matrix(self.dataMatrix, 'csc')
@@ -290,12 +321,28 @@ class Compute_Similarity_Python:
 
                 # Apply normalization and shrinkage, ensure denominator != 0
                 if self.normalize:
-                    denominator = sumOfSquared[columnIndex] * sumOfSquared + self.shrink + 1e-6
+
+                    if self.asymmetric_cosine:
+                        denominator = sumOfSquared_to_alpha[columnIndex] * sumOfSquared_to_1_minus_alpha + self.shrink + 1e-6
+                    else:
+                        denominator = sumOfSquared[columnIndex] * sumOfSquared + self.shrink + 1e-6
+
                     this_column_weights = np.multiply(this_column_weights, 1 / denominator)
+
 
                 # Apply the specific denominator for Tanimoto
                 elif self.tanimoto_coefficient:
                     denominator = sumOfSquared[columnIndex] + sumOfSquared - this_column_weights + self.shrink + 1e-6
+                    this_column_weights = np.multiply(this_column_weights, 1 / denominator)
+
+                elif self.dice_coefficient:
+                    denominator = sumOfSquared[columnIndex] + sumOfSquared + self.shrink + 1e-6
+                    this_column_weights = np.multiply(this_column_weights, 1 / denominator)
+
+                elif self.tversky_coefficient:
+                    denominator = this_column_weights + \
+                                  (sumOfSquared[columnIndex] - this_column_weights)*self.tversky_alpha + \
+                                  (sumOfSquared - this_column_weights)*self.tversky_beta + self.shrink + 1e-6
                     this_column_weights = np.multiply(this_column_weights, 1 / denominator)
 
                 # If no normalization or tanimoto is selected, apply only shrink

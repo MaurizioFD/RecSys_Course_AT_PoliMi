@@ -139,6 +139,8 @@ class Incremental_Training_Early_Stopping(object):
                         print("{}: Convergence reached! Terminating at epoch {}. Best value for '{}' at epoch {} is {:.4f}. Elapsed time {:.2f} min".format(
                             algorithm_name, currentEpoch+1, validation_metric, self.epochs_best, self.best_validation_metric, (time.time() - start_time) / 60))
 
+                else:
+                    self.epochs_best = currentEpoch
 
             # If no validation required, always keep the latest
             if not stop_on_validation:

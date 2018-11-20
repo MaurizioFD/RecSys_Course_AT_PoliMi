@@ -75,9 +75,46 @@ def saveSparseIntoCSV (filePath, sparse_matrix, separator=","):
             separator = separator))
 
 
+import sys, time
+
+
+def urllretrieve_reporthook(count, block_size, total_size):
+
+    global start_time
+
+    if count == 0:
+        start_time = time.time()
+        return
+
+    duration = time.time() - start_time + 1
+
+    progress_size = int(count * block_size)
+    speed = int(progress_size / (1024 * duration))
+    percent = min(int(count*block_size*100/total_size),100)
+
+    sys.stdout.write("\rDataReader: Downloaded {:.2f}%, {:.2f} MB, {:.0f} KB/s, {:.0f} seconds passed".format(
+                    percent, progress_size / (1024 * 1024), speed, duration))
+
+    sys.stdout.flush()
+
+
+def downloadFromURL(URL, destinationFolder):
+
+    from urllib.request import urlretrieve
+
+    urlretrieve (URL, destinationFolder, reporthook=urllretrieve_reporthook)
+
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+
+
+
 
 
 class Movielens10MReader(object):
+
+    DATASET_URL = "http://files.grouplens.org/datasets/movielens/ml-10m.zip"
+
 
     def __init__(self, splitTrainTest = False, splitTrainTestValidation =[0.6, 0.2, 0.2] , loadPredefinedTrainTest = True):
 
@@ -88,10 +125,25 @@ class Movielens10MReader(object):
 
         print("Movielens10MReader: loading data...")
 
-        dataSubfolder = "./data/"
+        dataSubfolder = "./data/Movielens_10M/"
 
-        dataFile = zipfile.ZipFile(dataSubfolder + "movielens_10m.zip")
+        try:
+
+            dataFile = zipfile.ZipFile(dataSubfolder + "ml-10m.zip")
+
+        except (FileNotFoundError, zipfile.BadZipFile):
+
+            print("Movielens10MReader: Unable to fild data zip file. Downloading...")
+
+
+            downloadFromURL(self.DATASET_URL, dataSubfolder + "ml-10m.zip")
+
+            dataFile = zipfile.ZipFile(dataSubfolder + "ml-10m.zip")
+
+
+
         URM_path = dataFile.extract("ml-10M100K/ratings.dat", path=dataSubfolder)
+
 
 
         if not loadPredefinedTrainTest:

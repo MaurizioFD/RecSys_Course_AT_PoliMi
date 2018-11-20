@@ -29,12 +29,12 @@ class ItemKNNCFRecommender(SimilarityMatrixRecommender, Recommender):
 
         self.sparse_weights = sparse_weights
 
-    def fit(self, topK=50, shrink=100, similarity='cosine', normalize=True):
+    def fit(self, topK=50, shrink=100, similarity='cosine', normalize=True, **similarity_args):
 
         self.topK = topK
         self.shrink = shrink
 
-        similarity = Compute_Similarity(self.URM_train, shrink=shrink, topK=topK, normalize=normalize, similarity = similarity)
+        similarity = Compute_Similarity(self.URM_train, shrink=shrink, topK=topK, normalize=normalize, similarity = similarity, **similarity_args)
 
 
         if self.sparse_weights:

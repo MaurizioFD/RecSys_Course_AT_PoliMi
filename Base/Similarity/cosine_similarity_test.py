@@ -480,7 +480,7 @@ def runCompilationScript():
     # python compileCython.py Compute_Similarity_Cython.pyx build_ext --inplace
 
     # Command to generate html report
-    # cython -a cosine_similarity.pyx
+    # cython -a Compute_Similarity_Cython.pyx
 
 if __name__ == '__main__':
 

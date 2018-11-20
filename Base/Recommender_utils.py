@@ -167,7 +167,7 @@ def removeTopPop(URM_1, URM_2=None, percentageToRemove=0.2):
 
 #
 #
-# def loadCSVintoSparse (filePath, header = False):
+# def load_edges (filePath, header = False):
 #
 #     values, rows, cols = [], [], []
 #
