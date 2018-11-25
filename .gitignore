@@ -3,6 +3,18 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Exclude Notebooks data files
+Notebooks_utils/movielens_10m.zip
+Notebooks_utils/ml-10M100K
+.ipynb_checkpoints
+result_experiments
+
+# Exclude all that is in folder, except python files
+data/Movielens_10M
+!data/Movielens_10M/*.py
+
+
+
 # Distribution / packaging
 .Python
 env/
