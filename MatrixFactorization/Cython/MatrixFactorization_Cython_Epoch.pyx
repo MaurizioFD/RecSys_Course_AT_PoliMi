@@ -218,7 +218,7 @@ cdef class MatrixFactorization_Cython_Epoch:
             prediction = 0.0
 
             for index in range(self.n_factors):
-                prediction = self.USER_factors[sample.user, index] * self.ITEM_factors[sample.item, index]
+                prediction += self.USER_factors[sample.user, index] * self.ITEM_factors[sample.item, index]
 
             gradient = sample.rating - prediction
             cumulative_loss += gradient**2
@@ -308,10 +308,10 @@ cdef class MatrixFactorization_Cython_Epoch:
                 item_id = self.URM_train_indices[item_index]
 
                 for factor_index in range(self.n_factors):
-                    user_factors_accumulated[factor_index] = self.USER_factors[item_id, factor_index]
+                    user_factors_accumulated[factor_index] += self.USER_factors[item_id, factor_index]
 
 
-            denominator = sqrt(end_pos_seen_items-start_pos_seen_items)
+            denominator = sqrt(end_pos_seen_items - start_pos_seen_items)
 
 
             for factor_index in range(self.n_factors):
@@ -327,7 +327,7 @@ cdef class MatrixFactorization_Cython_Epoch:
 
             # Compute prediction
             for factor_index in range(self.n_factors):
-                prediction = user_factors_accumulated[factor_index] * self.ITEM_factors[sample.item, factor_index]
+                prediction += user_factors_accumulated[factor_index] * self.ITEM_factors[sample.item, factor_index]
                 if np.isnan(prediction):
                     print("user_factors_accumulated[factor_index] " + str(user_factors_accumulated[factor_index]))
                     print("self.ITEM_factors[sample.item, factor_index] " + str(self.ITEM_factors[sample.item, factor_index]))
@@ -436,7 +436,7 @@ cdef class MatrixFactorization_Cython_Epoch:
             x_uij = 0.0
 
             for index in range(self.n_factors):
-                x_uij = self.USER_factors[u,index] * (self.ITEM_factors[i,index] - self.ITEM_factors[j,index])
+                x_uij += self.USER_factors[u,index] * (self.ITEM_factors[i,index] - self.ITEM_factors[j,index])
 
             # Use gradient of log(sigm(-x_uij))
             sigmoid_item = 1 / (1 + exp(x_uij))
