@@ -404,8 +404,7 @@ def runParameterSearch_Collaborative(recommender_class, URM_train, metric_to_opt
 
             hyperparamethers_range_dictionary = {}
             hyperparamethers_range_dictionary["topK"] = [5, 10, 20, 50, 100, 150, 200, 300, 400, 500, 600, 700, 800]
-            hyperparamethers_range_dictionary["l1_penalty"] = [1.0, 0.0, 1e-2, 1e-4, 1e-6]
-            hyperparamethers_range_dictionary["l2_penalty"] = [100.0, 1.0, 0.0, 1e-2, 1e-4, 1e-6]
+            hyperparamethers_range_dictionary["l1_ratio"] = [1.0, 0.0, 1e-2, 1e-4, 1e-6]
 
             recommenderDictionary = {DictionaryKeys.CONSTRUCTOR_POSITIONAL_ARGS: [URM_train],
                                      DictionaryKeys.CONSTRUCTOR_KEYWORD_ARGS: {},

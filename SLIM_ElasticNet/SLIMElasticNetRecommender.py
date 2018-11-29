@@ -41,26 +41,13 @@ class SLIMElasticNetRecommender(SimilarityMatrixRecommender, Recommender):
         self.URM_train = URM_train
 
 
-    def __str__(self):
-        return "SLIM (l1_penalty={},l2_penalty={},positive_only={})".format(
-            self.l1_penalty, self.l2_penalty, self.positive_only
-        )
+    def fit(self, l1_ratio=0.1, positive_only=True, topK = 100):
 
+        assert l1_ratio>= 0 and l1_ratio<=1, "SLIM_ElasticNet: l1_ratio must be between 0 and 1, provided value was {}".format(l1_ratio)
 
-    def fit(self, l1_penalty=0.1, l2_penalty=0.1, positive_only=True, topK = 100):
-
-        self.l1_penalty = l1_penalty
-        self.l2_penalty = l2_penalty
+        self.l1_ratio = l1_ratio
         self.positive_only = positive_only
         self.topK = topK
-
-        if self.l1_penalty + self.l2_penalty != 0:
-            self.l1_ratio = self.l1_penalty / (self.l1_penalty + self.l2_penalty)
-        else:
-            print("SLIM_ElasticNet: l1_penalty+l2_penalty cannot be equal to zero, setting the ratio l1/(l1+l2) to 1.0")
-            self.l1_ratio = 1.0
-
-
 
         # initialize the ElasticNet model
         self.model = ElasticNet(alpha=1.0,
