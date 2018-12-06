@@ -17,7 +17,7 @@ def train_test_holdout(URM_all, train_perc = 0.8):
     shape = URM_all.shape
 
 
-    train_mask = np.random.choice([True,False], numInteractions, [train_perc, 1-train_perc])
+    train_mask = np.random.choice([True,False], numInteractions, p=[train_perc, 1-train_perc])
 
 
     URM_train = sps.coo_matrix((URM_all.data[train_mask], (URM_all.row[train_mask], URM_all.col[train_mask])), shape=shape)
