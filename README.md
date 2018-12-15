@@ -20,9 +20,9 @@ This is the official repository for the 2018 Recommender Systems course at Polim
  
  
 #### Bayesian parameter tuning:
-A simple wrapper of another library ( https://github.com/fmfn/BayesianOptimization ) allowing for a simple and fast parameter tuning.
-The BayesianSearch object will save the following files:
-- AlgorithmName_BayesianSearch.txt file with all the cases explored and the recommendation quality
+A simple wrapper of scikit-optimize allowing for a simple and fast parameter tuning.
+The BayesianSkoptSearch object will save the following files:
+- AlgorithmName_BayesianSkoptSearch.txt file with all the cases explored and the recommendation quality
 - _best_model file which contains the trained model and can be loaded with recommender.loadModel(path_to_best_model_file)
 - _best_parameter file which contains a dictionary with all the fit parameters, it can be passed to recommender.fit(**dictionary_best_parameter)
 - _best_result_validation file which contains a dictionary with the results of the best solution on the validation
