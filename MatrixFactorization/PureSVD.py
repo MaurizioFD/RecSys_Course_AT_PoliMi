@@ -8,9 +8,7 @@ Created on 14/06/18
 
 from Base.Recommender import Recommender
 from Base.Recommender_utils import check_matrix
-from Base.SimilarityMatrixRecommender import SimilarityMatrixRecommender
 
-from sklearn.decomposition import TruncatedSVD
 import scipy.sparse as sps
 
 
@@ -20,12 +18,12 @@ class PureSVDRecommender(Recommender):
     RECOMMENDER_NAME = "PureSVDRecommender"
 
     def __init__(self, URM_train):
+
         super(PureSVDRecommender, self).__init__()
 
         # CSR is faster during evaluation
         self.URM_train = check_matrix(URM_train, 'csr')
-
-        self.compute_item_score = self.compute_score_SVD
+        self._compute_item_score = self._compute_score_SVD
 
 
     def fit(self, num_factors=100):
@@ -43,38 +41,25 @@ class PureSVDRecommender(Recommender):
 
         print(self.RECOMMENDER_NAME + " Computing SVD decomposition... Done!")
 
-        # truncatedSVD = TruncatedSVD(n_components = num_factors)
-        #
-        # truncatedSVD.fit(self.URM_train)
-        #
-        # truncatedSVD
 
-        #U, s, Vt =
+    def _compute_score_SVD(self, user_id_array, items_to_compute = None):
 
+        assert self.U.shape[0] > user_id_array.max(),\
+                "PureSVDRecommender: Cold users not allowed. Users in trained model are {}, requested prediction for users up to {}".format(
+                self.U.shape[0], user_id_array.max())
 
+        if items_to_compute is not None:
+            item_scores = self.U[user_id_array, :].dot(self.s_Vt[:,items_to_compute])
+        else:
+            item_scores = self.U[user_id_array, :].dot(self.s_Vt)
 
-    def compute_score_SVD(self, user_id_array):
-
-        try:
-
-            item_weights = self.U[user_id_array, :].dot(self.s_Vt)
-
-        except:
-            pass
-
-        return item_weights
-
-
-
-
-
-
+        return item_scores
 
 
 
 
     def saveModel(self, folder_path, file_name = None):
-        
+
         import pickle
 
         if file_name is None:
@@ -89,12 +74,9 @@ class PureSVDRecommender(Recommender):
             "s_Vt":self.s_Vt
         }
 
-
         pickle.dump(data_dict,
                     open(folder_path + file_name, "wb"),
                     protocol=pickle.HIGHEST_PROTOCOL)
 
-
-        print("{}: Saving complete")
-
+        print("{}: Saving complete".format(self.RECOMMENDER_NAME, folder_path + file_name))
 

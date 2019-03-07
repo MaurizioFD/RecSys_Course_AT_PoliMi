@@ -331,7 +331,8 @@ def runParameterSearch_Collaborative(recommender_class, URM_train, metric_to_opt
                                     "stop_on_validation": True,
                                     "evaluator_object": evaluator_validation_earlystopping,
                                     "lower_validatons_allowed": 20,
-                                    "validation_metric": metric_to_optimize}
+                                    "validation_metric": metric_to_optimize,
+                                    "positive_threshold_BPR": None}
             )
 
 
@@ -363,13 +364,14 @@ def runParameterSearch_Collaborative(recommender_class, URM_train, metric_to_opt
 
             recommender_parameters = SearchInputRecommenderParameters(
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
-                CONSTRUCTOR_KEYWORD_ARGS = {'train_with_sparse_weights':True, 'symmetric':True, 'positive_threshold':0},
+                CONSTRUCTOR_KEYWORD_ARGS = {'train_with_sparse_weights':True, 'symmetric':True},
                 FIT_POSITIONAL_ARGS = [],
                 FIT_KEYWORD_ARGS = {"validation_every_n": 5,
                                     "stop_on_validation": True,
                                     "evaluator_object": evaluator_validation_earlystopping,
                                     "lower_validatons_allowed": 20,
-                                    "validation_metric": metric_to_optimize}
+                                    "validation_metric": metric_to_optimize,
+                                    "positive_threshold_BPR": None}
             )
 
 
