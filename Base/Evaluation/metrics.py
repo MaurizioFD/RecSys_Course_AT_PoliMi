@@ -79,6 +79,32 @@ class Coverage_User(Metrics_Object):
 
 
 
+class MAP(Metrics_Object):
+    """
+    Mean Average Precision, defined as the mean of the AveragePrecision over all users
+
+    """
+
+    def __init__(self):
+        super(MAP, self).__init__()
+        self.cumulative_AP = 0.0
+        self.n_users = 0
+
+    def add_recommendations(self, is_relevant, pos_items):
+        self.cumulative_AP += average_precision(is_relevant, pos_items)
+        self.n_users += 1
+
+    def get_metric_value(self):
+        return self.cumulative_AP/self.n_users
+
+    def merge_with_other(self, other_metric_object):
+        assert other_metric_object is MAP, "MAP: attempting to merge with a metric object of different type"
+
+        self.cumulative_AP += other_metric_object.cumulative_AP
+        self.n_users += other_metric_object.n_users
+
+
+
 
 class Gini_Diversity(Metrics_Object):
     """
@@ -484,18 +510,49 @@ def arhr(is_relevant):
     p_reciprocal = 1/np.arange(1,len(is_relevant)+1, 1.0, dtype=np.float64)
     arhr_score = is_relevant.dot(p_reciprocal)
 
-    assert 0 <= arhr_score <= p_reciprocal.sum(), arhr_score
+    #assert 0 <= arhr_score <= p_reciprocal.sum(), "arhr_score {} should be between 0 and {}".format(arhr_score, p_reciprocal.sum())
+    assert not np.isnan(arhr_score), "ARHR is NaN"
     return arhr_score
 
 
 
-def precision(is_relevant, n_test_items):
+def precision(is_relevant):
+
+    precision_score = np.sum(is_relevant, dtype=np.float32) / len(is_relevant)
+
+    assert 0 <= precision_score <= 1, precision_score
+    return precision_score
+
+
+def precision_min_test_len(is_relevant, n_test_items):
 
     precision_score = np.sum(is_relevant, dtype=np.float32) / min(n_test_items, len(is_relevant))
 
     assert 0 <= precision_score <= 1, precision_score
     return precision_score
 
+
+def rmse(all_items_predicted_ratings, relevant_items, relevant_items_rating):
+
+    # Important, some items will have -np.inf score and are treated as if they did not exist
+
+    # RMSE with test items
+    relevant_items_error = (all_items_predicted_ratings[relevant_items]-relevant_items_rating)**2
+
+    finite_prediction_mask = np.isfinite(relevant_items_error)
+    relevant_items_error = relevant_items_error[finite_prediction_mask]
+
+    squared_error = np.sum(relevant_items_error)
+
+    # # Second the RMSE against all non-test items assumed having true rating 0
+    # # In order to avoid the need of explicitly indexing all non-relevant items, use a difference
+    # squared_error += np.sum(all_items_predicted_ratings[np.isfinite(all_items_predicted_ratings)]**2) - \
+    #                  np.sum(all_items_predicted_ratings[relevant_items][np.isfinite(all_items_predicted_ratings[relevant_items])]**2)
+
+    mean_squared_error = squared_error/finite_prediction_mask.sum()
+    rmse = np.sqrt(mean_squared_error)
+
+    return rmse
 
 
 def recall_min_test_len(is_relevant, pos_items):
@@ -526,13 +583,13 @@ def rr(is_relevant):
         return 0.0
 
 
-def map(is_relevant, pos_items):
+def average_precision(is_relevant, pos_items):
 
     p_at_k = is_relevant * np.cumsum(is_relevant, dtype=np.float32) / (1 + np.arange(is_relevant.shape[0]))
-    map_score = np.sum(p_at_k) / np.min([pos_items.shape[0], is_relevant.shape[0]])
+    a_p = np.sum(p_at_k) / np.min([pos_items.shape[0], is_relevant.shape[0]])
 
-    assert 0 <= map_score <= 1, map_score
-    return map_score
+    assert 0 <= a_p <= 1, a_p
+    return a_p
 
 
 def ndcg(ranked_list, pos_items, relevance=None, at=None):

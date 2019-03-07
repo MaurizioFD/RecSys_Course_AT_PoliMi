@@ -72,15 +72,16 @@ class Recommender(object):
 
 
 
-    def compute_item_score(self, user_id):
-        raise NotImplementedError("Recommender: compute_item_score not assigned for current recommender, unable to compute prediction scores")
+    def _compute_item_score(self, user_id, items_to_compute = None):
+        raise NotImplementedError("Recommender: _compute_item_score not assigned for current recommender, unable to compute prediction scores")
 
 
 
 
 
 
-    def recommend(self, user_id_array, cutoff = None, remove_seen_flag=True, remove_top_pop_flag = False, remove_CustomItems_flag = False):
+    def recommend(self, user_id_array, cutoff = None, remove_seen_flag=True, items_to_compute = None,
+                  remove_top_pop_flag = False, remove_CustomItems_flag = False, return_scores = False):
 
         # If is a scalar transform it in a 1-cell array
         if np.isscalar(user_id_array):
@@ -95,7 +96,7 @@ class Recommender(object):
 
         # Compute the scores using the model-specific function
         # Vectorize over all users in user_id_array
-        scores_batch = self.compute_item_score(user_id_array)
+        scores_batch = self._compute_item_score(user_id_array, items_to_compute=items_to_compute)
 
 
         # if self.normalize:
@@ -157,63 +158,12 @@ class Recommender(object):
         if single_user:
             ranking_list = ranking_list[0]
 
-        return ranking_list
 
+        if return_scores:
+            return ranking_list, scores_batch
 
-
-
-
-
-    def evaluateRecommendations(self, URM_test, at=5, minRatingsPerUser=1, exclude_seen=True,
-                                filterCustomItems = np.array([], dtype=np.int),
-                                filterCustomUsers = np.array([], dtype=np.int)):
-        """
-        Speed info:
-        - Sparse weighgs: batch mode is 2x faster than sequential
-        - Dense weighgts: batch and sequential speed are equivalent
-
-
-        :param URM_test:            URM to be used for testing
-        :param at: 5                    Length of the recommended items
-        :param minRatingsPerUser: 1     Users with less than this number of interactions will not be evaluated
-        :param exclude_seen: True       Whether to remove already seen items from the recommended items
-
-        :param mode: 'sequential', 'parallel', 'batch'
-        :param filterTopPop: False or decimal number        Percentage of items to be removed from recommended list and testing interactions
-        :param filterCustomItems: Array, default empty           Items ID to NOT take into account when recommending
-        :param filterCustomUsers: Array, default empty           Users ID to NOT take into account when recommending
-        :return:
-        """
-
-        import warnings
-
-        warnings.warn("DEPRECATED! Use Base.Evaluation.SequentialEvaluator.evaluateRecommendations()", DeprecationWarning)
-
-
-        from Base.Evaluation.Evaluator import SequentialEvaluator
-
-        evaluator = SequentialEvaluator(URM_test, [at], exclude_seen= exclude_seen,
-                                        minRatingsPerUser=minRatingsPerUser,
-                                        ignore_items=filterCustomItems, ignore_users=filterCustomUsers)
-
-        results_run, results_run_string = evaluator.evaluateRecommender(self)
-
-        results_run = results_run[at]
-
-        results_run_lowercase = {}
-
-        for key in results_run.keys():
-            results_run_lowercase[key.lower()] = results_run[key]
-
-
-        return results_run_lowercase
-
-
-
-
-
-
-
+        else:
+            return ranking_list
 
 
 

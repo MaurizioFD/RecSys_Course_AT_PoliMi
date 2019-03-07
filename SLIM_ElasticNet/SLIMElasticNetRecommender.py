@@ -25,7 +25,6 @@ class SLIMElasticNetRecommender(SimilarityMatrixRecommender, Recommender):
     See:
         Efficient Top-N Recommendation by Linear Regression,
         M. Levy and K. Jack, LSRS workshop at RecSys 2013.
-        https://www.slideshare.net/MarkLevy/efficient-slides
 
         SLIM: Sparse linear methods for top-n recommender systems,
         X. Ning and G. Karypis, ICDM 2011.
@@ -171,10 +170,6 @@ class MultiThreadSLIM_ElasticNet(SLIMElasticNetRecommender, SimilarityMatrixReco
 
         super(MultiThreadSLIM_ElasticNet, self).__init__(URM_train)
 
-    def __str__(self):
-        return "SLIM_mt (l1_penalty={},l2_penalty={},positive_only={},workers={})".format(
-            self.l1_penalty, self.l2_penalty, self.positive_only, self.workers
-        )
 
     def _partial_fit(self, currentItem, X, topK):
         model = ElasticNet(alpha=1.0,
@@ -211,24 +206,17 @@ class MultiThreadSLIM_ElasticNet(SLIMElasticNetRecommender, SimilarityMatrixReco
         rows = ranking
         cols = [currentItem] * len(ranking)
 
-        #
-        # values = model.coef_[nnz_idx]
-        # rows = np.arange(X.shape[1])[nnz_idx]
-        # cols = np.ones(nnz_idx.sum()) * currentItem
-        #
         return values, rows, cols
 
-    def fit(self,l1_penalty=0.1,
-                 l2_penalty=0.1,
+    def fit(self,l1_ratio=0.1,
                  positive_only=True,
                  topK = 100,
                  workers=multiprocessing.cpu_count()):
 
+        assert l1_ratio>= 0 and l1_ratio<=1, "SLIM_ElasticNet: l1_ratio must be between 0 and 1, provided value was {}".format(l1_ratio)
 
-        self.l1_penalty = l1_penalty
-        self.l2_penalty = l2_penalty
+        self.l1_ratio = l1_ratio
         self.positive_only = positive_only
-        self.l1_ratio = self.l1_penalty / (self.l1_penalty + self.l2_penalty)
         self.topK = topK
 
         self.workers = workers
@@ -260,112 +248,3 @@ class MultiThreadSLIM_ElasticNet(SLIMElasticNetRecommender, SimilarityMatrixReco
         # generate the sparse weight matrix
         self.W_sparse = sps.csc_matrix((values, (rows, cols)), shape=(n_items, n_items), dtype=np.float32)
 
-    #
-    # def fitThreading(self, X):
-    #
-    #     self.dataset = X
-    #     X = check_matrix(X, 'csc', dtype=np.float32)
-    #
-    #
-    #     numThreads = 1
-    #
-    #
-    #     n_items = X.shape[1]
-    #
-    #     passo = int(n_items/numThreads)
-    #     threadList = []
-    #
-    #
-    #
-    #     for numThread in range(numThreads):
-    #
-    #         if numThread == numThreads-1:
-    #             end_col = n_items
-    #         else:
-    #             end_col = passo*(numThread +1)
-    #
-    #         if numThread == 0:
-    #             start_col = 0
-    #         else:
-    #             start_col = passo*numThread +1
-    #
-    #         newThread = _myThread(numThread, X, start_col, end_col)
-    #         newThread.start()
-    #
-    #         threadList.append(newThread)
-    #
-    #
-    #     values, rows, cols = [], [], []
-    #
-    #     for numThread in range(len(threadList)):
-    #
-    #         threadList[numThread].join
-    #
-    #         new_values, new_rows, new_cols = threadList[numThread].get_components()
-    #
-    #         values.extend(new_values)
-    #         rows.extend(new_rows)
-    #         cols.extend(new_cols)
-    #
-    #     self.W_sparse = sps.csc_matrix((values, (rows, cols)), shape=(n_items, n_items), dtype=np.float32)
-    #
-#
-#
-#
-# class _myThread(threading.Thread):
-#
-#     def __init__(self, numThread, X, start_col, end_col):
-#         super(_myThread, self).__init__()
-#
-#         l1_penalty=0.1
-#         l2_penalty=0.1
-#         positive_only=True,
-#         l1_ratio = l1_penalty / (l1_penalty + l2_penalty)
-#
-#         self.numThread = numThread
-#         self.start_col = start_col
-#         self.end_col = end_col
-#         self.X = X.copy()
-#         self.model = ElasticNet(alpha=1.0,
-#                                l1_ratio=l1_ratio,
-#                                positive=positive_only,
-#                                fit_intercept=False,
-#                                copy_X=False)
-#
-#
-#         self.values = []
-#         self.rows = []
-#         self.cols = []
-#
-#
-#     def run(self):
-#
-#         range_col = self.end_col-self.start_col
-#
-#         message_step = int(range_col*0.05)
-#
-#         for j in range(self.start_col, self.end_col):
-#
-#             complete = (j-self.start_col)
-#
-#
-#             if ( complete % message_step == 0):
-#                 print('Thread: ' + str(self.numThread) + ' - ' + str(int(complete/range_col*100)) + ' % complete')
-#
-#             # get the target column
-#             y = self.X[:, j].toarray()
-#             # set the j-th column of X to zero
-#             self.X.data[self.X.indptr[j]:self.X.indptr[j + 1]] = 0.0
-#             # fit one ElasticNet model per column
-#             self.model.fit(self.X, y)
-#             # self.model.coef_ contains the coefficient of the ElasticNet model
-#             # let's keep only the non-zero values
-#             nnz_idx = self.model.coef_ > 0.0
-#             self.values.extend(self.model.coef_[nnz_idx])
-#             self.rows.extend(np.arange(self.X.shape[1])[nnz_idx])
-#             self.cols.extend(np.ones(nnz_idx.sum()) * j)
-#
-#         print('Thread: ' + str(self.numThread) + ' - terminated')
-#
-#     def get_components (self):
-#         return self.values, self.rows, self.cols

@@ -9,6 +9,8 @@ import numpy as np
 from Base.Recommender import Recommender
 from Base.Recommender_utils import check_matrix
 
+import pickle
+
 
 class TopPop(Recommender):
     """Top Popular recommender"""
@@ -19,38 +21,44 @@ class TopPop(Recommender):
         super(TopPop, self).__init__()
 
         # convert to csc matrix for faster column-wise sum
-        self.URM_train = check_matrix(URM_train, 'csc', dtype=np.float32)
+        self.URM_train = check_matrix(URM_train, 'csr', dtype=np.float32)
         self.URM_train.eliminate_zeros()
 
-        self.compute_item_score = self.compute_score_top_pop
+        self._compute_item_score = self._compute_score_top_pop
 
 
     def fit(self):
 
-        # This command returns a numpy.matrix of size (1, nitems)
         # Use np.ediff1d and NOT a sum done over the rows as there might be values other than 0/1
-        self.item_pop = np.ediff1d(self.URM_train.indptr)
+        self.item_pop = np.ediff1d(self.URM_train.tocsc().indptr)
 
 
-        self.URM_train = check_matrix(self.URM_train, 'csr', dtype=np.float32)
+    def _compute_score_top_pop(self, user_id_array, items_to_compute = None):
 
-        self.item_pop = np.asarray(self.item_pop).squeeze()  # necessary to convert it into a numpy.array of size (nitems,)
+        scores_batch = np.array(self.item_pop.copy(), dtype=np.float32).reshape((1, -1))
 
+        if items_to_compute is not None:
+            scores_batch = scores_batch[items_to_compute]
 
-    def compute_score_top_pop(self, user_id_array):
-
-        scores_batch = np.array(self.item_pop.copy(), dtype=np.float).reshape((1, -1))
-        scores_batch = np.repeat(scores_batch, len(user_id_array), axis = 0)
+        scores_batch = np.repeat(scores_batch, len(user_id_array), axis=0)
 
         return scores_batch
 
 
+    def saveModel(self, folder_path, file_name = None):
 
-    def __str__(self):
-        return "TopPop"
+        if file_name is None:
+            file_name = self.RECOMMENDER_NAME
 
+        print("{}: Saving model in file '{}'".format(self.RECOMMENDER_NAME, folder_path + file_name))
 
+        dictionary_to_save = {"item_pop": self.item_pop}
 
+        pickle.dump(dictionary_to_save,
+                    open(folder_path + file_name, "wb"),
+                    protocol=pickle.HIGHEST_PROTOCOL)
+
+        print("{}: Saving complete".format(self.RECOMMENDER_NAME))
 
 
 
@@ -65,8 +73,7 @@ class GlobalEffects(Recommender):
 
         self.URM_train = check_matrix(URM_train, 'csc', dtype=np.float32)
 
-        self.compute_item_score = self.compute_score_global_effects
-
+        self._compute_item_score = self._compute_score_global_effects
 
 
     def fit(self, lambda_user=10, lambda_item=25):
@@ -112,21 +119,35 @@ class GlobalEffects(Recommender):
         # the global average and user bias won't change the ranking, so there is no need to use them
         #self.item_ranking = np.argsort(self.bi)[::-1]
 
-
         self.URM_train = check_matrix(self.URM_train, 'csr', dtype=np.float32)
 
 
-    def compute_score_global_effects(self, user_id_array):
+    def _compute_score_global_effects(self, user_id_array, items_to_compute = None):
 
         scores_batch = np.array(self.item_bias.copy(), dtype=np.float).reshape((1, -1))
+
+        if items_to_compute is not None:
+            scores_batch = scores_batch[items_to_compute]
+
         scores_batch = np.repeat(scores_batch, len(user_id_array), axis = 0)
 
         return scores_batch
 
-    def __str__(self):
-        return 'GlobalEffects'
 
+    def saveModel(self, folder_path, file_name = None):
 
+        if file_name is None:
+            file_name = self.RECOMMENDER_NAME
+
+        print("{}: Saving model in file '{}'".format(self.RECOMMENDER_NAME, folder_path + file_name))
+
+        dictionary_to_save = {"item_bias": self.item_bias}
+
+        pickle.dump(dictionary_to_save,
+                    open(folder_path + file_name, "wb"),
+                    protocol=pickle.HIGHEST_PROTOCOL)
+
+        print("{}: Saving complete".format(self.RECOMMENDER_NAME))
 
 
 
@@ -141,18 +162,37 @@ class Random(Recommender):
         # convert to csc matrix for faster column-wise sum
         self.URM_train = check_matrix(URM_train, 'csr', dtype=np.float32)
 
-        self.compute_item_score = self.compute_score_random
+        self._compute_item_score = self._compute_score_random
 
 
-    def fit(self):
-
+    def fit(self, random_seed=42):
+        np.random.seed(random_seed)
         self.n_items = self.URM_train.shape[1]
 
 
-    def compute_score_random(self, user_id_array):
+    def _compute_score_random(self, user_id_array, items_to_compute = None):
 
-        return np.random.rand(len(user_id_array), self.n_items)
+        if items_to_compute is None:
+            n_items_to_recommend = self.n_items
+        else:
+            n_items_to_recommend = len(items_to_compute)
+
+        return np.random.rand(len(user_id_array), n_items_to_recommend)
 
 
-    def __str__(self):
-        return "Random"
+
+    def saveModel(self, folder_path, file_name = None):
+
+        if file_name is None:
+            file_name = self.RECOMMENDER_NAME
+
+        print("{}: Saving model in file '{}'".format(self.RECOMMENDER_NAME, folder_path + file_name))
+
+        dictionary_to_save = {}
+
+        pickle.dump(dictionary_to_save,
+                    open(folder_path + file_name, "wb"),
+                    protocol=pickle.HIGHEST_PROTOCOL)
+
+        print("{}: Saving complete".format(self.RECOMMENDER_NAME))
+

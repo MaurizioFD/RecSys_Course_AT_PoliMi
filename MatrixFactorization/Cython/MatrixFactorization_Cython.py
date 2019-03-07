@@ -8,11 +8,7 @@ Created on 07/09/17
 
 from Base.Recommender import Recommender
 from Base.Incremental_Training_Early_Stopping import Incremental_Training_Early_Stopping
-from Base.Evaluation.Evaluator import SequentialEvaluator
-
-import subprocess
-import os, sys
-import time, pickle
+import subprocess, os, sys, pickle
 import numpy as np
 
 
@@ -23,28 +19,15 @@ class MatrixFactorization_Cython(Recommender, Incremental_Training_Early_Stoppin
     RECOMMENDER_NAME = "MatrixFactorization_Cython_Recommender"
 
 
-    def __init__(self, URM_train, positive_threshold=4, URM_validation = None, recompile_cython = False, algorithm = "MF_BPR"):
-
+    def __init__(self, URM_train, recompile_cython = False, algorithm = "MF_BPR"):
 
         super(MatrixFactorization_Cython, self).__init__()
 
-
         self.URM_train = URM_train
-        self.n_users = URM_train.shape[0]
-        self.n_items = URM_train.shape[1]
+        self.n_users, self.n_items = URM_train.shape
         self.normalize = False
-
         self.algorithm = algorithm
-
-        self.positive_threshold = positive_threshold
-
-        if URM_validation is not None:
-            self.URM_validation = URM_validation.copy()
-        else:
-            self.URM_validation = None
-
-        self.compute_item_score = self.compute_score_MF
-
+        self._compute_item_score = self._compute_score_MF
 
         if recompile_cython:
             print("Compiling in Cython")
@@ -52,38 +35,39 @@ class MatrixFactorization_Cython(Recommender, Incremental_Training_Early_Stoppin
             print("Compilation Complete")
 
 
+    def _compute_score_MF(self, user_id_array, items_to_compute = None):
 
-    def compute_score_MF(self, user_id):
+        assert self.W.shape[0] > user_id_array.max(),\
+                "MatrixFactorization_Cython: Cold users not allowed. Users in trained model are {}, requested prediction for users up to {}".format(
+                self.W.shape[0], user_id_array.max())
 
-        scores_array = np.dot(self.W[user_id], self.H.T)
+        if items_to_compute is not None:
+            item_scores = np.dot(self.W[user_id_array], self.H[:,items_to_compute].T)
+        else:
+            item_scores = np.dot(self.W[user_id_array], self.H.T)
 
-        return scores_array
+        return item_scores
 
 
-
-
-    def fit(self, epochs=300, batch_size = 1000, num_factors=10,
+    def fit(self, epochs=300, batch_size = 1000, num_factors=10, positive_threshold_BPR = None,
             learning_rate = 0.01, sgd_mode='sgd', user_reg = 0.0, positive_reg = 0.0, negative_reg = 0.0,
-            stop_on_validation = False, lower_validatons_allowed = 5, validation_metric = "MAP",
-            evaluator_object = None, validation_every_n = 5):
-
+            stop_on_validation = False,
+            lower_validatons_allowed = None,
+            validation_metric = "MAP",
+            evaluator_object = None,
+            validation_every_n = None):
 
 
         self.num_factors = num_factors
         self.sgd_mode = sgd_mode
         self.batch_size = batch_size
+        self.positive_threshold_BPR = positive_threshold_BPR
         self.learning_rate = learning_rate
-
-        if evaluator_object is None and stop_on_validation:
-            evaluator_object = SequentialEvaluator(self.URM_validation, [5])
-
 
         # Import compiled module
         from MatrixFactorization.Cython.MatrixFactorization_Cython_Epoch import MatrixFactorization_Cython_Epoch
 
-
         if self.algorithm == "FUNK_SVD":
-
 
             self.cythonEpoch = MatrixFactorization_Cython_Epoch(self.URM_train,
                                                      algorithm = self.algorithm,
@@ -96,7 +80,6 @@ class MatrixFactorization_Cython(Recommender, Incremental_Training_Early_Stoppin
                                                      negative_reg = 0.0)
 
         elif self.algorithm == "ASY_SVD":
-
 
             self.cythonEpoch = MatrixFactorization_Cython_Epoch(self.URM_train,
                                                      algorithm = self.algorithm,
@@ -113,10 +96,11 @@ class MatrixFactorization_Cython(Recommender, Incremental_Training_Early_Stoppin
             # Select only positive interactions
             URM_train_positive = self.URM_train.copy()
 
-            URM_train_positive.data = URM_train_positive.data >= self.positive_threshold
-            URM_train_positive.eliminate_zeros()
+            if self.positive_threshold_BPR is not None:
+                URM_train_positive.data = URM_train_positive.data >= self.positive_threshold_BPR
+                URM_train_positive.eliminate_zeros()
 
-            assert URM_train_positive.nnz > 0, "MatrixFactorization_Cython: URM_train_positive is empty, positive threshold is too high"
+                assert URM_train_positive.nnz > 0, "MatrixFactorization_Cython: URM_train_positive is empty, positive threshold is too high"
 
             self.cythonEpoch = MatrixFactorization_Cython_Epoch(URM_train_positive,
                                                      algorithm = self.algorithm,
@@ -129,17 +113,21 @@ class MatrixFactorization_Cython(Recommender, Incremental_Training_Early_Stoppin
                                                      negative_reg=negative_reg)
 
 
+        self.W = self.cythonEpoch.get_W()
+        self.W_best = self.W.copy()
+
+        self.H = self.cythonEpoch.get_H()
+        self.H_best = self.H.copy()
 
 
-
-
-        self._train_with_early_stopping(epochs, validation_every_n, stop_on_validation,
-                                    validation_metric, lower_validatons_allowed, evaluator_object,
-                                    algorithm_name = self.algorithm)
-
-
-
-
+        self._train_with_early_stopping(epochs,
+                                        validation_every_n = validation_every_n,
+                                        stop_on_validation = stop_on_validation,
+                                        validation_metric = validation_metric,
+                                        lower_validatons_allowed = lower_validatons_allowed,
+                                        evaluator_object = evaluator_object,
+                                        algorithm_name = self.algorithm
+                                        )
 
         self.W = self.W_best
         self.H = self.H_best
@@ -148,33 +136,15 @@ class MatrixFactorization_Cython(Recommender, Incremental_Training_Early_Stoppin
 
 
 
+    def _prepare_model_for_validation(self):
 
-
-
-    def _initialize_incremental_model(self):
-
-        self.W_incremental = self.cythonEpoch.get_W()
-        self.W_best = self.W_incremental.copy()
-
-        self.H_incremental = self.cythonEpoch.get_H()
-        self.H_best = self.H_incremental.copy()
-
-
-
-    def _update_incremental_model(self):
-
-        self.W_incremental = self.cythonEpoch.get_W()
-        self.H_incremental = self.cythonEpoch.get_H()
-
-        self.W = self.W_incremental
-        self.H = self.H_incremental
+        self.W = self.cythonEpoch.get_W()
+        self.H = self.cythonEpoch.get_H()
 
 
     def _update_best_model(self):
-
-        self.W_best = self.W_incremental.copy()
-        self.H_best = self.H_incremental.copy()
-
+        self.W_best = self.W.copy()
+        self.H_best = self.H.copy()
 
 
     def _run_epoch(self, num_epoch):
@@ -287,7 +257,7 @@ class MatrixFactorization_Cython(Recommender, Incremental_Training_Early_Stoppin
                     protocol=pickle.HIGHEST_PROTOCOL)
 
 
-        print("{}: Saving complete")
+        print("{}: Saving complete".format(self.RECOMMENDER_NAME, folder_path + file_name))
 
 
 

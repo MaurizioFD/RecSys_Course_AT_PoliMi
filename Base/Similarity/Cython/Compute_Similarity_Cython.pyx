@@ -476,26 +476,6 @@ cdef class Compute_Similarity_Cython:
 
             processedItems += 1
 
-            if processedItems % print_block_size==0 or processedItems==end_col_local:
-
-                current_time = time.time()
-
-                # Set block size to the number of items necessary in order to print every 30 seconds
-                itemPerSec = processedItems/(time.time()-start_time)
-
-                print_block_size = int(itemPerSec*30)
-
-                if current_time - last_print_time > 30  or processedItems==end_col_local:
-
-                    print("Similarity column {} ( {:2.0f} % ), {:.2f} column/sec, elapsed time {:.2f} min".format(
-                        processedItems, processedItems*1.0/(end_col_local-start_col_local)*100, itemPerSec, (time.time()-start_time) / 60))
-
-                    last_print_time = current_time
-
-                    sys.stdout.flush()
-                    sys.stderr.flush()
-
-
             # Computed similarities go in self.this_item_weights
             self.computeItemSimilarities(itemIndex)
 
@@ -592,6 +572,29 @@ cdef class Compute_Similarity_Cython:
 
 
             itemIndex += 1
+
+
+            if processedItems % print_block_size==0 or processedItems==end_col_local:
+
+                current_time = time.time()
+
+                # Set block size to the number of items necessary in order to print every 30 seconds
+                if current_time - start_time != 0:
+                    itemPerSec = processedItems/(current_time - start_time)
+                else:
+                    itemPerSec = 1
+
+                print_block_size = int(itemPerSec*30)
+
+                if current_time - last_print_time > 30  or processedItems==end_col_local:
+
+                    print("Similarity column {} ( {:2.0f} % ), {:.2f} column/sec, elapsed time {:.2f} min".format(
+                        processedItems, processedItems*1.0/(end_col_local-start_col_local)*100, itemPerSec, (time.time()-start_time) / 60))
+
+                    last_print_time = current_time
+
+                    sys.stdout.flush()
+                    sys.stderr.flush()
 
         # End while on columns
 

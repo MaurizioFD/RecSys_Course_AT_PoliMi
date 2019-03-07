@@ -10,7 +10,6 @@ from Base.Recommender import Recommender
 from Base.Recommender_utils import check_matrix
 from Base.SimilarityMatrixRecommender import SimilarityMatrixRecommender
 from Base.IR_feature_weighting import okapi_BM_25, TF_IDF
-
 import numpy as np
 
 from Base.Similarity.Compute_Similarity import Compute_Similarity
@@ -34,7 +33,7 @@ class ItemKNNCBFRecommender(SimilarityMatrixRecommender, Recommender):
         self.sparse_weights = sparse_weights
 
 
-    def fit(self, topK=50, shrink=100, similarity='cosine', normalize=True, feature_weighting = "none", **similarity_args):
+    def fit(self, topK=50, shrink=100, similarity='cosine', normalize=True, feature_weighting = "none", ICM_bias = None, **similarity_args):
 
         self.topK = topK
         self.shrink = shrink
@@ -51,6 +50,8 @@ class ItemKNNCBFRecommender(SimilarityMatrixRecommender, Recommender):
             self.ICM = self.ICM.astype(np.float32)
             self.ICM = TF_IDF(self.ICM)
 
+        if ICM_bias is not None:
+            self.ICM.data += ICM_bias
 
         similarity = Compute_Similarity(self.ICM.T, shrink=shrink, topK=topK, normalize=normalize, similarity = similarity, **similarity_args)
 

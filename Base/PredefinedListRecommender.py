@@ -25,7 +25,7 @@ class PredefinedListRecommender(Recommender):
         self.URM_train = sps.csr_matrix((self.URM_recommendations.shape))
 
         #self._base_item_score = np.ones(self.URM_recommendations.shape[1]) * np.inf * (-1)
-        #self.compute_item_score = self.compute_score_predefined_list
+        #self._compute_item_score = self.compute_score_predefined_list
 
 
 

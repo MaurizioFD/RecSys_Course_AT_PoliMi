@@ -28,13 +28,13 @@ if __name__ == '__main__':
     URM_test = dataReader.get_URM_test()
 
     recommender_list = [
-        Random,
-        TopPop,
-        P3alphaRecommender,
-        RP3betaRecommender,
-        ItemKNNCFRecommender,
-        UserKNNCFRecommender,
-        MatrixFactorization_BPR_Cython,
+        # Random,
+        # TopPop,
+        # P3alphaRecommender,
+        # RP3betaRecommender,
+        # ItemKNNCFRecommender,
+        # UserKNNCFRecommender,
+        # MatrixFactorization_BPR_Cython,
         MatrixFactorization_FunkSVD_Cython,
         PureSVDRecommender,
         SLIM_BPR_Cython,
@@ -42,9 +42,9 @@ if __name__ == '__main__':
         ]
 
 
-    from Base.Evaluation.Evaluator import SequentialEvaluator
+    from Base.Evaluation.Evaluator import EvaluatorHoldout
 
-    evaluator = SequentialEvaluator(URM_test, [5, 20], exclude_seen=True)
+    evaluator = EvaluatorHoldout(URM_test, [5, 20], exclude_seen=True)
 
 
     output_root_path = "result_experiments/"

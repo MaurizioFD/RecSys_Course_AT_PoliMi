@@ -47,11 +47,13 @@ class Compute_Similarity_Python:
 
         super(Compute_Similarity_Python, self).__init__()
 
-        self.TopK = topK
+
         self.shrink = shrink
         self.normalize = normalize
-        self.n_columns = dataMatrix.shape[1]
-        self.n_rows = dataMatrix.shape[0]
+
+        self.n_rows, self.n_columns = dataMatrix.shape
+        self.TopK = min(topK, self.n_columns)
+
         self.asymmetric_alpha = asymmetric_alpha
         self.tversky_alpha = tversky_alpha
         self.tversky_beta = tversky_beta
@@ -91,11 +93,6 @@ class Compute_Similarity_Python:
                              " Allowed values are: 'cosine', 'pearson', 'adjusted', 'asymmetric', 'jaccard', 'tanimoto',"
                              "dice, tversky."
                              " Passed value was '{}'".format(similarity))
-
-
-
-        if self.TopK == 0:
-            self.W_dense = np.zeros((self.n_columns, self.n_columns))
 
 
         self.use_row_weights = False
@@ -282,7 +279,7 @@ class Compute_Similarity_Python:
 
 
             if time.time() - start_time_print_batch >= 30 or end_col_block==end_col_local:
-                columnPerSec = processedItems / (time.time() - start_time)
+                columnPerSec = processedItems / (time.time() - start_time + 1e-9)
 
                 print("Similarity column {} ( {:2.0f} % ), {:.2f} column/sec, elapsed time {:.2f} min".format(
                     processedItems, processedItems / (end_col_local - start_col_local) * 100, columnPerSec, (time.time() - start_time)/ 60))
@@ -297,9 +294,11 @@ class Compute_Similarity_Python:
             item_data = self.dataMatrix[:, start_col_block:end_col_block]
             item_data = item_data.toarray().squeeze()
 
+            # If only 1 feature avoid last dimension to disappear
+            if item_data.ndim == 1:
+                item_data = np.atleast_2d(item_data)
+
             if self.use_row_weights:
-                #item_data = np.multiply(item_data, self.row_weights)
-                #item_data = item_data.T.dot(self.row_weights_diag).T
                 this_block_weights = self.dataMatrix_weighted.T.dot(item_data)
 
             else:
@@ -352,26 +351,22 @@ class Compute_Similarity_Python:
 
                 #this_column_weights = this_column_weights.toarray().ravel()
 
-                if self.TopK == 0:
-                    self.W_dense[:, columnIndex] = this_column_weights
+                # Sort indices and select TopK
+                # Sorting is done in three steps. Faster then plain np.argsort for higher number of items
+                # - Partition the data to extract the set of relevant items
+                # - Sort only the relevant items
+                # - Get the original item index
+                relevant_items_partition = (-this_column_weights).argpartition(self.TopK-1)[0:self.TopK]
+                relevant_items_partition_sorting = np.argsort(-this_column_weights[relevant_items_partition])
+                top_k_idx = relevant_items_partition[relevant_items_partition_sorting]
 
-                else:
-                    # Sort indices and select TopK
-                    # Sorting is done in three steps. Faster then plain np.argsort for higher number of items
-                    # - Partition the data to extract the set of relevant items
-                    # - Sort only the relevant items
-                    # - Get the original item index
-                    relevant_items_partition = (-this_column_weights).argpartition(self.TopK-1)[0:self.TopK]
-                    relevant_items_partition_sorting = np.argsort(-this_column_weights[relevant_items_partition])
-                    top_k_idx = relevant_items_partition[relevant_items_partition_sorting]
+                # Incrementally build sparse matrix, do not add zeros
+                notZerosMask = this_column_weights[top_k_idx] != 0.0
+                numNotZeros = np.sum(notZerosMask)
 
-                    # Incrementally build sparse matrix, do not add zeros
-                    notZerosMask = this_column_weights[top_k_idx] != 0.0
-                    numNotZeros = np.sum(notZerosMask)
-
-                    values.extend(this_column_weights[top_k_idx][notZerosMask])
-                    rows.extend(top_k_idx[notZerosMask])
-                    cols.extend(np.ones(numNotZeros) * columnIndex)
+                values.extend(this_column_weights[top_k_idx][notZerosMask])
+                rows.extend(top_k_idx[notZerosMask])
+                cols.extend(np.ones(numNotZeros) * columnIndex)
 
 
 
@@ -381,15 +376,9 @@ class Compute_Similarity_Python:
 
         # End while on columns
 
-
-        if self.TopK == 0:
-            return self.W_dense
-
-        else:
-
-            W_sparse = sps.csr_matrix((values, (rows, cols)),
-                                      shape=(self.n_columns, self.n_columns),
-                                      dtype=np.float32)
+        W_sparse = sps.csr_matrix((values, (rows, cols)),
+                                  shape=(self.n_columns, self.n_columns),
+                                  dtype=np.float32)
 
 
-            return W_sparse
+        return W_sparse

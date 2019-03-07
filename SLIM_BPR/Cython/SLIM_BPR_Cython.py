@@ -17,7 +17,7 @@ import subprocess
 import os, sys, time
 
 import numpy as np
-from Base.Evaluation.Evaluator import SequentialEvaluator
+from Base.Evaluation.Evaluator import EvaluatorHoldout
 
 
 
@@ -30,7 +30,7 @@ class SLIM_BPR_Cython(SimilarityMatrixRecommender, Recommender, Incremental_Trai
     RECOMMENDER_NAME = "SLIM_BPR_Recommender"
 
 
-    def __init__(self, URM_train, positive_threshold=4, URM_validation = None,
+    def __init__(self, URM_train,
                  recompile_cython = False, final_model_sparse_weights = True, train_with_sparse_weights = False,
                  symmetric = True):
 
@@ -42,27 +42,13 @@ class SLIM_BPR_Cython(SimilarityMatrixRecommender, Recommender, Incremental_Trai
         self.n_users = URM_train.shape[0]
         self.n_items = URM_train.shape[1]
         self.normalize = False
-        self.positive_threshold = positive_threshold
 
         self.train_with_sparse_weights = train_with_sparse_weights
         self.sparse_weights = final_model_sparse_weights
 
-        if URM_validation is not None:
-            self.URM_validation = URM_validation.copy()
-        else:
-            self.URM_validation = None
-
 
         if self.train_with_sparse_weights:
             self.sparse_weights = True
-
-
-        self.URM_mask = self.URM_train.copy()
-
-        self.URM_mask.data = self.URM_mask.data >= self.positive_threshold
-        self.URM_mask.eliminate_zeros()
-
-        assert self.URM_mask.nnz > 0, "MatrixFactorization_Cython: URM_train_positive is empty, positive threshold is too high"
 
 
         self.symmetric = symmetric
@@ -89,11 +75,14 @@ class SLIM_BPR_Cython(SimilarityMatrixRecommender, Recommender, Incremental_Trai
 
 
 
-    def fit(self, epochs=300, logFile=None,
+    def fit(self, epochs=300, logFile=None, positive_threshold_BPR = None,
             batch_size = 1000, lambda_i = 0.0, lambda_j = 0.0, learning_rate = 1e-4, topK = 200,
             sgd_mode='adagrad', gamma=0.995, beta_1=0.9, beta_2=0.999,
-            stop_on_validation = False, lower_validatons_allowed = 5, validation_metric = "MAP",
-            evaluator_object = None, validation_every_n = 1):
+            stop_on_validation = False,
+            lower_validatons_allowed = None,
+            validation_metric = "MAP",
+            evaluator_object = None,
+            validation_every_n = None):
 
 
         # Import compiled module
@@ -102,14 +91,19 @@ class SLIM_BPR_Cython(SimilarityMatrixRecommender, Recommender, Incremental_Trai
         # Select only positive interactions
         URM_train_positive = self.URM_train.copy()
 
-        URM_train_positive.data = URM_train_positive.data >= self.positive_threshold
-        URM_train_positive.eliminate_zeros()
-
+        self.positive_threshold_BPR = positive_threshold_BPR
         self.sgd_mode = sgd_mode
         self.epochs = epochs
 
 
-        self.cythonEpoch = SLIM_BPR_Cython_Epoch(self.URM_mask,
+        if self.positive_threshold_BPR is not None:
+            URM_train_positive.data = URM_train_positive.data >= self.positive_threshold_BPR
+            URM_train_positive.eliminate_zeros()
+
+            assert URM_train_positive.nnz > 0, "MatrixFactorization_Cython: URM_train_positive is empty, positive threshold is too high"
+
+
+        self.cythonEpoch = SLIM_BPR_Cython_Epoch(URM_train_positive,
                                                  train_with_sparse_weights = self.train_with_sparse_weights,
                                                  final_model_sparse_weights = self.sparse_weights,
                                                  topK=topK,
@@ -135,8 +129,6 @@ class SLIM_BPR_Cython(SimilarityMatrixRecommender, Recommender, Incremental_Trai
         else:
             self.validation_every_n = np.inf
 
-        if evaluator_object is None and stop_on_validation:
-            evaluator_object = SequentialEvaluator(self.URM_validation, [5])
 
 
         self.batch_size = batch_size
@@ -144,11 +136,18 @@ class SLIM_BPR_Cython(SimilarityMatrixRecommender, Recommender, Incremental_Trai
         self.lambda_j = lambda_j
         self.learning_rate = learning_rate
 
+        self.S_incremental = self.cythonEpoch.get_S()
+        self.S_best = self.S_incremental.copy()
 
-        self._train_with_early_stopping(epochs, validation_every_n, stop_on_validation,
-                                    validation_metric, lower_validatons_allowed, evaluator_object,
-                                    algorithm_name = self.RECOMMENDER_NAME)
 
+        self._train_with_early_stopping(epochs,
+                                        validation_every_n = validation_every_n,
+                                        stop_on_validation = stop_on_validation,
+                                        validation_metric = validation_metric,
+                                        lower_validatons_allowed = lower_validatons_allowed,
+                                        evaluator_object = evaluator_object,
+                                        algorithm_name = self.RECOMMENDER_NAME
+                                        )
 
 
 
@@ -159,12 +158,8 @@ class SLIM_BPR_Cython(SimilarityMatrixRecommender, Recommender, Incremental_Trai
 
 
 
-    def _initialize_incremental_model(self):
-        self.S_incremental = self.cythonEpoch.get_S()
-        self.S_best = self.S_incremental.copy()
 
-
-    def _update_incremental_model(self):
+    def _prepare_model_for_validation(self):
         self.get_S_incremental_and_set_W()
 
 

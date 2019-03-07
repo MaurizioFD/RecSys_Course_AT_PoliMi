@@ -12,7 +12,7 @@ import time, sys, copy
 
 from enum import Enum
 
-from Base.Evaluation.metrics import roc_auc, precision, recall, recall_min_test_len, map, ndcg, rr, arhr, \
+from Base.Evaluation.metrics import roc_auc, precision, precision_min_test_len, recall, recall_min_test_len, MAP, ndcg, rr, arhr, rmse, \
     Novelty, Coverage_Item, Metrics_Object, Coverage_User, Gini_Diversity, Shannon_Entropy, Diversity_MeanInterList, Diversity_Herfindahl
 
 
@@ -20,6 +20,7 @@ class EvaluatorMetrics(Enum):
 
     ROC_AUC = "ROC_AUC"
     PRECISION = "PRECISION"
+    PRECISION_TEST_LEN = "PRECISION_TEST_LEN"
     RECALL = "RECALL"
     RECALL_TEST_LEN = "RECALL_TEST_LEN"
     MAP = "MAP"
@@ -28,6 +29,7 @@ class EvaluatorMetrics(Enum):
     F1 = "F1"
     HIT_RATE = "HIT_RATE"
     ARHR = "ARHR"
+    RMSE = "RMSE"
     NOVELTY = "NOVELTY"
     DIVERSITY_SIMILARITY = "DIVERSITY_SIMILARITY"
     DIVERSITY_MEAN_INTER_LIST = "DIVERSITY_MEAN_INTER_LIST"
@@ -68,6 +70,9 @@ def create_empty_metrics_dict(n_items, n_users, URM_train, ignore_items, ignore_
         elif metric == EvaluatorMetrics.NOVELTY:
             empty_dict[metric.value] = Novelty(URM_train)
 
+        elif metric == EvaluatorMetrics.MAP:
+            empty_dict[metric.value] = MAP()
+
         elif metric == EvaluatorMetrics.DIVERSITY_SIMILARITY:
                 if diversity_similarity_object is not None:
                     empty_dict[metric.value] = copy.deepcopy(diversity_similarity_object)
@@ -76,6 +81,26 @@ def create_empty_metrics_dict(n_items, n_users, URM_train, ignore_items, ignore_
 
     return  empty_dict
 
+
+
+
+
+def get_result_string(results_run, n_decimals=7):
+
+    output_str = ""
+
+    for cutoff in results_run.keys():
+
+        results_run_current_cutoff = results_run[cutoff]
+
+        output_str += "CUTOFF: {} - ".format(cutoff)
+
+        for metric in results_run_current_cutoff.keys():
+            output_str += "{}: {:.{n_decimals}f}, ".format(metric, results_run_current_cutoff[metric], n_decimals = n_decimals)
+
+        output_str += "\n"
+
+    return output_str
 
 
 
@@ -177,108 +202,93 @@ class Evaluator(object):
 
 
 
-    def get_result_string(self, results_run):
 
-        output_str = ""
-
-        for cutoff in results_run.keys():
-
-            results_run_current_cutoff = results_run[cutoff]
-
-            output_str += "CUTOFF: {} - ".format(cutoff)
-
-            for metric in results_run_current_cutoff.keys():
-                output_str += "{}: {:.7f}, ".format(metric, results_run_current_cutoff[metric])
-
-            output_str += "\n"
-
-        return output_str
-
-
-
-
-    def _run_evaluation_on_selected_users(self, recommender_object, usersToEvaluate):
-
-
-
-        start_time = time.time()
-        start_time_print = time.time()
-
-
-        results_dict = {}
-
-        for cutoff in self.cutoff_list:
-            results_dict[cutoff] = create_empty_metrics_dict(self.n_items, self.n_users,
-                                                             recommender_object.URM_train,
-                                                             self.ignore_items_ID,
-                                                             self.ignore_users_ID,
-                                                             cutoff,
-                                                             self.diversity_object)
-
-        n_users_evaluated = 0
-
-
-        for test_user in usersToEvaluate:
-
-            # Being the URM CSR, the indices are the non-zero column indexes
-            relevant_items = self.get_user_relevant_items(test_user)
-
-            n_users_evaluated += 1
-
-            recommended_items = recommender_object.recommend(test_user, remove_seen_flag=self.exclude_seen,
-                                                             cutoff = self.max_cutoff, remove_top_pop_flag=False, remove_CustomItems_flag=self.ignore_items_flag)
-
-            is_relevant = np.in1d(recommended_items, relevant_items, assume_unique=True)
-
-
-
-            for cutoff in self.cutoff_list:
-
-                results_current_cutoff = results_dict[cutoff]
-
-                is_relevant_current_cutoff = is_relevant[0:cutoff]
-                recommended_items_current_cutoff = recommended_items[0:cutoff]
-
-                results_current_cutoff[EvaluatorMetrics.ROC_AUC.value]              += roc_auc(is_relevant_current_cutoff)
-                results_current_cutoff[EvaluatorMetrics.PRECISION.value]            += precision(is_relevant_current_cutoff, len(relevant_items))
-                results_current_cutoff[EvaluatorMetrics.RECALL.value]               += recall(is_relevant_current_cutoff, relevant_items)
-                results_current_cutoff[EvaluatorMetrics.RECALL_TEST_LEN.value]      += recall_min_test_len(is_relevant_current_cutoff, relevant_items)
-                results_current_cutoff[EvaluatorMetrics.MAP.value]                  += map(is_relevant_current_cutoff, relevant_items)
-                results_current_cutoff[EvaluatorMetrics.MRR.value]                  += rr(is_relevant_current_cutoff)
-                results_current_cutoff[EvaluatorMetrics.NDCG.value]                 += ndcg(recommended_items_current_cutoff, relevant_items, relevance=self.get_user_test_ratings(test_user), at=cutoff)
-                results_current_cutoff[EvaluatorMetrics.HIT_RATE.value]             += is_relevant_current_cutoff.sum()
-                results_current_cutoff[EvaluatorMetrics.ARHR.value]                 += arhr(is_relevant_current_cutoff)
-
-                results_current_cutoff[EvaluatorMetrics.NOVELTY.value].add_recommendations(recommended_items_current_cutoff)
-                results_current_cutoff[EvaluatorMetrics.DIVERSITY_GINI.value].add_recommendations(recommended_items_current_cutoff)
-                results_current_cutoff[EvaluatorMetrics.SHANNON_ENTROPY.value].add_recommendations(recommended_items_current_cutoff)
-                results_current_cutoff[EvaluatorMetrics.COVERAGE_ITEM.value].add_recommendations(recommended_items_current_cutoff)
-                results_current_cutoff[EvaluatorMetrics.COVERAGE_USER.value].add_recommendations(recommended_items_current_cutoff, test_user)
-                results_current_cutoff[EvaluatorMetrics.DIVERSITY_MEAN_INTER_LIST.value].add_recommendations(recommended_items_current_cutoff)
-                results_current_cutoff[EvaluatorMetrics.DIVERSITY_HERFINDAHL.value].add_recommendations(recommended_items_current_cutoff)
-
-                if EvaluatorMetrics.DIVERSITY_SIMILARITY.value in results_current_cutoff:
-                    results_current_cutoff[EvaluatorMetrics.DIVERSITY_SIMILARITY.value].add_recommendations(recommended_items_current_cutoff)
-
-
-
-
-
-            if time.time() - start_time_print > 30 or n_users_evaluated==len(self.usersToEvaluate):
-                print("SequentialEvaluator: Processed {} ( {:.2f}% ) in {:.2f} seconds. Users per second: {:.0f}".format(
-                              n_users_evaluated,
-                              100.0* float(n_users_evaluated)/len(self.usersToEvaluate),
-                              time.time()-start_time,
-                              float(n_users_evaluated)/(time.time()-start_time)))
-
-                sys.stdout.flush()
-                sys.stderr.flush()
-
-                start_time_print = time.time()
-
-
-
-        return results_dict, n_users_evaluated
+    #
+    #
+    # def _run_evaluation_on_selected_users(self, recommender_object, usersToEvaluate):
+    #
+    #
+    #
+    #     start_time = time.time()
+    #     start_time_print = time.time()
+    #
+    #
+    #     results_dict = {}
+    #
+    #     for cutoff in self.cutoff_list:
+    #         results_dict[cutoff] = create_empty_metrics_dict(self.n_items, self.n_users,
+    #                                                          recommender_object.URM_train,
+    #                                                          self.ignore_items_ID,
+    #                                                          self.ignore_users_ID,
+    #                                                          cutoff,
+    #                                                          self.diversity_object)
+    #
+    #     n_users_evaluated = 0
+    #
+    #
+    #     for test_user in usersToEvaluate:
+    #
+    #         # Being the URM CSR, the indices are the non-zero column indexes
+    #         relevant_items = self.get_user_relevant_items(test_user)
+    #
+    #         n_users_evaluated += 1
+    #
+    #         recommended_items = recommender_object.recommend(test_user, remove_seen_flag=self.exclude_seen,
+    #                                                          cutoff = self.max_cutoff, remove_top_pop_flag=False, remove_CustomItems_flag=self.ignore_items_flag)
+    #
+    #         is_relevant = np.in1d(recommended_items, relevant_items, assume_unique=True)
+    #
+    #
+    #
+    #         for cutoff in self.cutoff_list:
+    #
+    #             results_current_cutoff = results_dict[cutoff]
+    #
+    #             is_relevant_current_cutoff = is_relevant[0:cutoff]
+    #             recommended_items_current_cutoff = recommended_items[0:cutoff]
+    #
+    #             results_current_cutoff[EvaluatorMetrics.ROC_AUC.value]              += roc_auc(is_relevant_current_cutoff)
+    #             results_current_cutoff[EvaluatorMetrics.PRECISION.value]            += precision(is_relevant_current_cutoff)
+    #             results_current_cutoff[EvaluatorMetrics.PRECISION_TEST_LEN.value]   += precision_min_test_len(is_relevant_current_cutoff, len(relevant_items))
+    #             results_current_cutoff[EvaluatorMetrics.RECALL.value]               += recall(is_relevant_current_cutoff, relevant_items)
+    #             results_current_cutoff[EvaluatorMetrics.RECALL_TEST_LEN.value]      += recall_min_test_len(is_relevant_current_cutoff, relevant_items)
+    #             results_current_cutoff[EvaluatorMetrics.MAP.value]                  += map(is_relevant_current_cutoff, relevant_items)
+    #             results_current_cutoff[EvaluatorMetrics.MRR.value]                  += rr(is_relevant_current_cutoff)
+    #             results_current_cutoff[EvaluatorMetrics.NDCG.value]                 += ndcg(recommended_items_current_cutoff, relevant_items, relevance=self.get_user_test_ratings(test_user), at=cutoff)
+    #             results_current_cutoff[EvaluatorMetrics.HIT_RATE.value]             += is_relevant_current_cutoff.sum()
+    #             results_current_cutoff[EvaluatorMetrics.ARHR.value]                 += arhr(is_relevant_current_cutoff)
+    #
+    #             results_current_cutoff[EvaluatorMetrics.NOVELTY.value].add_recommendations(recommended_items_current_cutoff)
+    #             results_current_cutoff[EvaluatorMetrics.DIVERSITY_GINI.value].add_recommendations(recommended_items_current_cutoff)
+    #             results_current_cutoff[EvaluatorMetrics.SHANNON_ENTROPY.value].add_recommendations(recommended_items_current_cutoff)
+    #             results_current_cutoff[EvaluatorMetrics.COVERAGE_ITEM.value].add_recommendations(recommended_items_current_cutoff)
+    #             results_current_cutoff[EvaluatorMetrics.COVERAGE_USER.value].add_recommendations(recommended_items_current_cutoff, test_user)
+    #             results_current_cutoff[EvaluatorMetrics.DIVERSITY_MEAN_INTER_LIST.value].add_recommendations(recommended_items_current_cutoff)
+    #             results_current_cutoff[EvaluatorMetrics.DIVERSITY_HERFINDAHL.value].add_recommendations(recommended_items_current_cutoff)
+    #
+    #             if EvaluatorMetrics.DIVERSITY_SIMILARITY.value in results_current_cutoff:
+    #                 results_current_cutoff[EvaluatorMetrics.DIVERSITY_SIMILARITY.value].add_recommendations(recommended_items_current_cutoff)
+    #
+    #
+    #
+    #
+    #
+    #         if time.time() - start_time_print > 30 or n_users_evaluated==len(self.usersToEvaluate):
+    #             print("EvaluatorHoldout: Processed {} ( {:.2f}% ) in {:.2f} seconds. Users per second: {:.0f}".format(
+    #                           n_users_evaluated,
+    #                           100.0* float(n_users_evaluated)/len(self.usersToEvaluate),
+    #                           time.time()-start_time,
+    #                           float(n_users_evaluated)/(time.time()-start_time)))
+    #
+    #             sys.stdout.flush()
+    #             sys.stderr.flush()
+    #
+    #             start_time_print = time.time()
+    #
+    #
+    #
+    #     return results_dict, n_users_evaluated
+    #
 
 
 
@@ -298,11 +308,10 @@ class Evaluator(object):
 
 
 
+class EvaluatorHoldout(Evaluator):
+    """EvaluatorHoldout"""
 
-class SequentialEvaluator(Evaluator):
-    """SequentialEvaluator"""
-
-    EVALUATOR_NAME = "SequentialEvaluator_Class"
+    EVALUATOR_NAME = "EvaluatorHoldout"
 
     def __init__(self, URM_test_list, cutoff_list, minRatingsPerUser=1, exclude_seen=True,
                  diversity_object = None,
@@ -310,16 +319,20 @@ class SequentialEvaluator(Evaluator):
                  ignore_users = None):
 
 
-        super(SequentialEvaluator, self).__init__(URM_test_list, cutoff_list,
-                            diversity_object = diversity_object,
-                            minRatingsPerUser=minRatingsPerUser, exclude_seen=exclude_seen,
-                            ignore_items = ignore_items, ignore_users = ignore_users)
+        super(EvaluatorHoldout, self).__init__(URM_test_list, cutoff_list,
+                                               diversity_object = diversity_object,
+                                               minRatingsPerUser=minRatingsPerUser, exclude_seen=exclude_seen,
+                                               ignore_items = ignore_items, ignore_users = ignore_users)
 
 
 
 
 
-    def _run_evaluation_on_selected_users(self, recommender_object, usersToEvaluate, block_size = 1000):
+    def _run_evaluation_on_selected_users(self, recommender_object, usersToEvaluate, block_size = None):
+
+
+        if block_size is None:
+            block_size = min(1000, int(1e8/self.n_items))
 
 
 
@@ -352,21 +365,28 @@ class SequentialEvaluator(Evaluator):
             user_batch_start = user_batch_end
 
             # Compute predictions for a batch of users using vectorization, much more efficient than computing it one at a time
-            recommended_items_batch_list = recommender_object.recommend(test_user_batch_array,
-                                                                  remove_seen_flag=self.exclude_seen,
-                                                                  cutoff = self.max_cutoff,
-                                                                  remove_top_pop_flag=False,
-                                                                  remove_CustomItems_flag=self.ignore_items_flag)
+            recommended_items_batch_list, scores_batch = recommender_object.recommend(test_user_batch_array,
+                                                                      remove_seen_flag=self.exclude_seen,
+                                                                      cutoff = self.max_cutoff,
+                                                                      remove_top_pop_flag=False,
+                                                                      remove_CustomItems_flag=self.ignore_items_flag,
+                                                                      return_scores = True
+                                                                     )
 
 
             # Compute recommendation quality for each user in batch
             for batch_user_index in range(len(recommended_items_batch_list)):
 
-                user_id = test_user_batch_array[batch_user_index]
-                recommended_items = recommended_items_batch_list[batch_user_index]
+                test_user = test_user_batch_array[batch_user_index]
+
+                relevant_items = self.get_user_relevant_items(test_user)
+                relevant_items_rating = self.get_user_test_ratings(test_user)
+
+                all_items_predicted_ratings = scores_batch[batch_user_index]
+                user_rmse = rmse(all_items_predicted_ratings, relevant_items, relevant_items_rating)
 
                 # Being the URM CSR, the indices are the non-zero column indexes
-                relevant_items = self.get_user_relevant_items(user_id)
+                recommended_items = recommended_items_batch_list[batch_user_index]
                 is_relevant = np.in1d(recommended_items, relevant_items, assume_unique=True)
 
                 n_users_evaluated += 1
@@ -379,20 +399,22 @@ class SequentialEvaluator(Evaluator):
                     recommended_items_current_cutoff = recommended_items[0:cutoff]
 
                     results_current_cutoff[EvaluatorMetrics.ROC_AUC.value]              += roc_auc(is_relevant_current_cutoff)
-                    results_current_cutoff[EvaluatorMetrics.PRECISION.value]            += precision(is_relevant_current_cutoff, len(relevant_items))
+                    results_current_cutoff[EvaluatorMetrics.PRECISION.value]            += precision(is_relevant_current_cutoff)
+                    results_current_cutoff[EvaluatorMetrics.PRECISION_TEST_LEN.value]   += precision_min_test_len(is_relevant_current_cutoff, len(relevant_items))
                     results_current_cutoff[EvaluatorMetrics.RECALL.value]               += recall(is_relevant_current_cutoff, relevant_items)
                     results_current_cutoff[EvaluatorMetrics.RECALL_TEST_LEN.value]      += recall_min_test_len(is_relevant_current_cutoff, relevant_items)
-                    results_current_cutoff[EvaluatorMetrics.MAP.value]                  += map(is_relevant_current_cutoff, relevant_items)
                     results_current_cutoff[EvaluatorMetrics.MRR.value]                  += rr(is_relevant_current_cutoff)
-                    results_current_cutoff[EvaluatorMetrics.NDCG.value]                 += ndcg(recommended_items_current_cutoff, relevant_items, relevance=self.get_user_test_ratings(user_id), at=cutoff)
+                    results_current_cutoff[EvaluatorMetrics.NDCG.value]                 += ndcg(recommended_items_current_cutoff, relevant_items, relevance=self.get_user_test_ratings(test_user), at=cutoff)
                     results_current_cutoff[EvaluatorMetrics.HIT_RATE.value]             += is_relevant_current_cutoff.sum()
                     results_current_cutoff[EvaluatorMetrics.ARHR.value]                 += arhr(is_relevant_current_cutoff)
+                    results_current_cutoff[EvaluatorMetrics.RMSE.value]                 += user_rmse
 
+                    results_current_cutoff[EvaluatorMetrics.MAP.value].add_recommendations(is_relevant_current_cutoff, relevant_items)
                     results_current_cutoff[EvaluatorMetrics.NOVELTY.value].add_recommendations(recommended_items_current_cutoff)
                     results_current_cutoff[EvaluatorMetrics.DIVERSITY_GINI.value].add_recommendations(recommended_items_current_cutoff)
                     results_current_cutoff[EvaluatorMetrics.SHANNON_ENTROPY.value].add_recommendations(recommended_items_current_cutoff)
                     results_current_cutoff[EvaluatorMetrics.COVERAGE_ITEM.value].add_recommendations(recommended_items_current_cutoff)
-                    results_current_cutoff[EvaluatorMetrics.COVERAGE_USER.value].add_recommendations(recommended_items_current_cutoff, user_id)
+                    results_current_cutoff[EvaluatorMetrics.COVERAGE_USER.value].add_recommendations(recommended_items_current_cutoff, test_user)
                     results_current_cutoff[EvaluatorMetrics.DIVERSITY_MEAN_INTER_LIST.value].add_recommendations(recommended_items_current_cutoff)
                     results_current_cutoff[EvaluatorMetrics.DIVERSITY_HERFINDAHL.value].add_recommendations(recommended_items_current_cutoff)
 
@@ -400,11 +422,8 @@ class SequentialEvaluator(Evaluator):
                         results_current_cutoff[EvaluatorMetrics.DIVERSITY_SIMILARITY.value].add_recommendations(recommended_items_current_cutoff)
 
 
-
-
-
                 if time.time() - start_time_print > 30 or n_users_evaluated==len(self.usersToEvaluate):
-                    print("SequentialEvaluator: Processed {} ( {:.2f}% ) in {:.2f} seconds. Users per second: {:.0f}".format(
+                    print("EvaluatorHoldout: Processed {} ( {:.2f}% ) in {:.2f} seconds. Users per second: {:.0f}".format(
                                   n_users_evaluated,
                                   100.0* float(n_users_evaluated)/len(self.usersToEvaluate),
                                   time.time()-start_time,
@@ -456,6 +475,7 @@ class SequentialEvaluator(Evaluator):
                 recall_ = results_current_cutoff[EvaluatorMetrics.RECALL.value]
 
                 if precision_ + recall_ != 0:
+                    # F1 micro averaged: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.104.8244&rep=rep1&type=pdf
                     results_current_cutoff[EvaluatorMetrics.F1.value] = 2 * (precision_ * recall_) / (precision_ + recall_)
 
 
@@ -464,7 +484,7 @@ class SequentialEvaluator(Evaluator):
 
 
 
-        results_run_string = self.get_result_string(results_dict)
+        results_run_string = get_result_string(results_dict)
 
 
 
@@ -481,243 +501,243 @@ class SequentialEvaluator(Evaluator):
 
 
 
-
-
-import multiprocessing
-from functools import partial
-
-
-
-class _ParallelEvaluator_batch(Evaluator):
-    """SequentialEvaluator"""
-
-    EVALUATOR_NAME = "SequentialEvaluator_Class"
-
-    def __init__(self, URM_test_list, cutoff_list, minRatingsPerUser=1, exclude_seen=True,
-                 diversity_object = None,
-                 ignore_items = None,
-                 ignore_users = None):
-
-
-        super(_ParallelEvaluator_batch, self).__init__(URM_test_list, cutoff_list,
-                            diversity_object = diversity_object,
-                            minRatingsPerUser=minRatingsPerUser, exclude_seen=exclude_seen,
-                            ignore_items = ignore_items, ignore_users = ignore_users)
-
-
-
-    def evaluateRecommender(self, recommender_object):
-        """
-        :param recommender_object: the trained recommender object, a Recommender subclass
-        :param URM_test_list: list of URMs to test the recommender against, or a single URM object
-        :param cutoff_list: list of cutoffs to be use to report the scores, or a single cutoff
-        """
-
-        results_dict, n_users_evaluated = self._run_evaluation_on_selected_users(recommender_object, self.usersToEvaluate)
-
-        return (results_dict, n_users_evaluated)
-
-
-
-def _run_parallel_evaluator(evaluator_object, recommender_object):
-
-    results_dict, _ = evaluator_object.evaluateRecommender(recommender_object)
-
-    return results_dict
-
-
-
-def _merge_results_dict(results_dict_1, results_dict_2, n_users_2):
-
-    assert results_dict_1.keys() == results_dict_2.keys(), "_merge_results_dict: the two result dictionaries have different cutoff values"
-
-
-    merged_dict = copy.deepcopy(results_dict_1)
-
-    for cutoff in merged_dict.keys():
-
-        merged_dict_cutoff = merged_dict[cutoff]
-        results_dict_2_cutoff = results_dict_2[cutoff]
-
-        for key in merged_dict_cutoff.keys():
-
-            result_metric = merged_dict_cutoff[key]
-
-            if result_metric is Metrics_Object:
-                merged_dict_cutoff[key].merge_with_other(results_dict_2_cutoff[key])
-            else:
-                merged_dict_cutoff[key] = result_metric + results_dict_2_cutoff[key]*n_users_2
-
-
-
-
-class ParallelEvaluator(Evaluator):
-    """ParallelEvaluator"""
-
-    EVALUATOR_NAME = "ParallelEvaluator_Class"
-
-    def __init__(self, URM_test_list, cutoff_list, minRatingsPerUser=1, exclude_seen=True,
-                 diversity_object = None,
-                 ignore_items = None,
-                 ignore_users = None):
-
-        assert False, "ParallelEvaluator is not a stable implementation"
-
-        super(ParallelEvaluator, self).__init__(URM_test_list, cutoff_list,
-                            diversity_object = diversity_object,
-                            minRatingsPerUser=minRatingsPerUser, exclude_seen=exclude_seen,
-                            ignore_items = ignore_items, ignore_users = ignore_users)
-
-
-
-    def evaluateRecommender(self, recommender_object, n_processes = None):
-        """
-        :param recommender_object: the trained recommender object, a Recommender subclass
-        :param URM_test_list: list of URMs to test the recommender against, or a single URM object
-        :param cutoff_list: list of cutoffs to be use to report the scores, or a single cutoff
-        """
-
-        if n_processes is None:
-            n_processes = int(multiprocessing.cpu_count()/2)
-
-        start_time = time.time()
-
-
-        # Split the users to evaluate
-        n_processes = min(n_processes, len(self.usersToEvaluate))
-        batch_len = int(len(self.usersToEvaluate)/n_processes)
-        batch_len = max(batch_len, 1)
-
-        sequential_evaluators_list = []
-        sequential_evaluators_n_users_list = []
-
-        for n_evaluator in range(n_processes):
-
-            stat_user = n_evaluator*batch_len
-            end_user = min((n_evaluator+1)*batch_len, len(self.usersToEvaluate))
-
-            if n_evaluator == n_processes-1:
-                end_user = len(self.usersToEvaluate)
-
-
-            batch_users = self.usersToEvaluate[stat_user:end_user]
-            sequential_evaluators_n_users_list.append(len(batch_users))
-
-            not_in_batch_users = np.in1d(self.usersToEvaluate, batch_users, invert=True)
-            not_in_batch_users = np.array(self.usersToEvaluate)[not_in_batch_users]
-
-            new_evaluator = _ParallelEvaluator_batch(self.URM_test, self.cutoff_list, ignore_users=not_in_batch_users)
-
-            sequential_evaluators_list.append(new_evaluator)
-
-
-
-        if self.ignore_items_flag:
-            recommender_object.set_items_to_ignore(self.ignore_items_ID)
-
-
-        run_parallel_evaluator_partial = partial(_run_parallel_evaluator, recommender_object = recommender_object)
-
-        pool = multiprocessing.Pool(processes = n_processes, maxtasksperchild=1)
-        resultList = pool.map(run_parallel_evaluator_partial, sequential_evaluators_list)
-
-
-
-        print("ParallelEvaluator: Processed {} ( {:.2f}% ) in {:.2f} seconds. Users per second: {:.0f}".format(
-                      len(self.usersToEvaluate),
-                      100.0* float(len(self.usersToEvaluate))/len(self.usersToEvaluate),
-                      time.time()-start_time,
-                      float(len(self.usersToEvaluate))/(time.time()-start_time)))
-
-        sys.stdout.flush()
-        sys.stderr.flush()
-
-
-
-        results_dict = {}
-        n_users_evaluated = 0
-
-        for cutoff in self.cutoff_list:
-             results_dict[cutoff] = create_empty_metrics_dict(self.n_items, self.n_users,
-                                                             recommender_object.URM_train,
-                                                             self.ignore_items_ID,
-                                                             self.ignore_users_ID,
-                                                             cutoff,
-                                                             self.diversity_object)
-
-
-        for new_result_index in range(len(resultList)):
-
-            new_result, n_users_evaluated_batch = resultList[new_result_index]
-            n_users_evaluated += n_users_evaluated_batch
-
-            results_dict = _merge_results_dict(results_dict, new_result, n_users_evaluated_batch)
-
-
-
-
-
-
-        for cutoff in self.cutoff_list:
-            for key in results_dict[cutoff].keys():
-                results_dict[cutoff][key] /= len(self.usersToEvaluate)
-
-
-
-
-
-        if n_users_evaluated > 0:
-
-            for cutoff in self.cutoff_list:
-
-                results_current_cutoff = results_dict[cutoff]
-
-                for key in results_current_cutoff.keys():
-
-                    value = results_current_cutoff[key]
-
-                    if isinstance(value, Metrics_Object):
-                        results_current_cutoff[key] = value.get_metric_value()
-                    else:
-                        results_current_cutoff[key] = value/n_users_evaluated
-
-                precision_ = results_current_cutoff[EvaluatorMetrics.PRECISION.value]
-                recall_ = results_current_cutoff[EvaluatorMetrics.RECALL.value]
-
-                if precision_ + recall_ != 0:
-                    results_current_cutoff[EvaluatorMetrics.F1.value] = 2 * (precision_ * recall_) / (precision_ + recall_)
-
-
-        else:
-            print("WARNING: No users had a sufficient number of relevant items")
-
-
-
-
-        sequential_evaluators_list = None
-        sequential_evaluators_n_users_list = None
-
-
-        if self.ignore_items_flag:
-            recommender_object.reset_items_to_ignore()
-
-
-
-        results_run_string = self.get_result_string(results_dict)
-
-        return (results_dict, results_run_string)
-
-
-
-
-
-
-
-
-class LeaveOneOutEvaluator(Evaluator):
-    """SequentialEvaluator"""
-
-    EVALUATOR_NAME = "LeaveOneOutEvaluator_Class"
+#
+#
+# import multiprocessing
+# from functools import partial
+#
+#
+#
+# class _ParallelEvaluator_batch(Evaluator):
+#     """EvaluatorHoldout"""
+#
+#     EVALUATOR_NAME = "SequentialEvaluator_Class"
+#
+#     def __init__(self, URM_test_list, cutoff_list, minRatingsPerUser=1, exclude_seen=True,
+#                  diversity_object = None,
+#                  ignore_items = None,
+#                  ignore_users = None):
+#
+#
+#         super(_ParallelEvaluator_batch, self).__init__(URM_test_list, cutoff_list,
+#                             diversity_object = diversity_object,
+#                             minRatingsPerUser=minRatingsPerUser, exclude_seen=exclude_seen,
+#                             ignore_items = ignore_items, ignore_users = ignore_users)
+#
+#
+#
+#     def evaluateRecommender(self, recommender_object):
+#         """
+#         :param recommender_object: the trained recommender object, a Recommender subclass
+#         :param URM_test_list: list of URMs to test the recommender against, or a single URM object
+#         :param cutoff_list: list of cutoffs to be use to report the scores, or a single cutoff
+#         """
+#
+#         results_dict, n_users_evaluated = self._run_evaluation_on_selected_users(recommender_object, self.usersToEvaluate)
+#
+#         return (results_dict, n_users_evaluated)
+#
+#
+#
+# def _run_parallel_evaluator(evaluator_object, recommender_object):
+#
+#     results_dict, _ = evaluator_object.evaluateRecommender(recommender_object)
+#
+#     return results_dict
+#
+#
+#
+# def _merge_results_dict(results_dict_1, results_dict_2, n_users_2):
+#
+#     assert results_dict_1.keys() == results_dict_2.keys(), "_merge_results_dict: the two result dictionaries have different cutoff values"
+#
+#
+#     merged_dict = copy.deepcopy(results_dict_1)
+#
+#     for cutoff in merged_dict.keys():
+#
+#         merged_dict_cutoff = merged_dict[cutoff]
+#         results_dict_2_cutoff = results_dict_2[cutoff]
+#
+#         for key in merged_dict_cutoff.keys():
+#
+#             result_metric = merged_dict_cutoff[key]
+#
+#             if result_metric is Metrics_Object:
+#                 merged_dict_cutoff[key].merge_with_other(results_dict_2_cutoff[key])
+#             else:
+#                 merged_dict_cutoff[key] = result_metric + results_dict_2_cutoff[key]*n_users_2
+#
+
+
+#
+# class ParallelEvaluator(Evaluator):
+#     """ParallelEvaluator"""
+#
+#     EVALUATOR_NAME = "ParallelEvaluator_Class"
+#
+#     def __init__(self, URM_test_list, cutoff_list, minRatingsPerUser=1, exclude_seen=True,
+#                  diversity_object = None,
+#                  ignore_items = None,
+#                  ignore_users = None):
+#
+#         assert False, "ParallelEvaluator is not a stable implementation"
+#
+#         super(ParallelEvaluator, self).__init__(URM_test_list, cutoff_list,
+#                             diversity_object = diversity_object,
+#                             minRatingsPerUser=minRatingsPerUser, exclude_seen=exclude_seen,
+#                             ignore_items = ignore_items, ignore_users = ignore_users)
+#
+#
+#
+#     def evaluateRecommender(self, recommender_object, n_processes = None):
+#         """
+#         :param recommender_object: the trained recommender object, a Recommender subclass
+#         :param URM_test_list: list of URMs to test the recommender against, or a single URM object
+#         :param cutoff_list: list of cutoffs to be use to report the scores, or a single cutoff
+#         """
+#
+#         if n_processes is None:
+#             n_processes = int(multiprocessing.cpu_count()/2)
+#
+#         start_time = time.time()
+#
+#
+#         # Split the users to evaluate
+#         n_processes = min(n_processes, len(self.usersToEvaluate))
+#         batch_len = int(len(self.usersToEvaluate)/n_processes)
+#         batch_len = max(batch_len, 1)
+#
+#         sequential_evaluators_list = []
+#         sequential_evaluators_n_users_list = []
+#
+#         for n_evaluator in range(n_processes):
+#
+#             stat_user = n_evaluator*batch_len
+#             end_user = min((n_evaluator+1)*batch_len, len(self.usersToEvaluate))
+#
+#             if n_evaluator == n_processes-1:
+#                 end_user = len(self.usersToEvaluate)
+#
+#
+#             batch_users = self.usersToEvaluate[stat_user:end_user]
+#             sequential_evaluators_n_users_list.append(len(batch_users))
+#
+#             not_in_batch_users = np.in1d(self.usersToEvaluate, batch_users, invert=True)
+#             not_in_batch_users = np.array(self.usersToEvaluate)[not_in_batch_users]
+#
+#             new_evaluator = _ParallelEvaluator_batch(self.URM_test, self.cutoff_list, ignore_users=not_in_batch_users)
+#
+#             sequential_evaluators_list.append(new_evaluator)
+#
+#
+#
+#         if self.ignore_items_flag:
+#             recommender_object.set_items_to_ignore(self.ignore_items_ID)
+#
+#
+#         run_parallel_evaluator_partial = partial(_run_parallel_evaluator, recommender_object = recommender_object)
+#
+#         pool = multiprocessing.Pool(processes = n_processes, maxtasksperchild=1)
+#         resultList = pool.map(run_parallel_evaluator_partial, sequential_evaluators_list)
+#
+#
+#
+#         print("ParallelEvaluator: Processed {} ( {:.2f}% ) in {:.2f} seconds. Users per second: {:.0f}".format(
+#                       len(self.usersToEvaluate),
+#                       100.0* float(len(self.usersToEvaluate))/len(self.usersToEvaluate),
+#                       time.time()-start_time,
+#                       float(len(self.usersToEvaluate))/(time.time()-start_time)))
+#
+#         sys.stdout.flush()
+#         sys.stderr.flush()
+#
+#
+#
+#         results_dict = {}
+#         n_users_evaluated = 0
+#
+#         for cutoff in self.cutoff_list:
+#              results_dict[cutoff] = create_empty_metrics_dict(self.n_items, self.n_users,
+#                                                              recommender_object.URM_train,
+#                                                              self.ignore_items_ID,
+#                                                              self.ignore_users_ID,
+#                                                              cutoff,
+#                                                              self.diversity_object)
+#
+#
+#         for new_result_index in range(len(resultList)):
+#
+#             new_result, n_users_evaluated_batch = resultList[new_result_index]
+#             n_users_evaluated += n_users_evaluated_batch
+#
+#             results_dict = _merge_results_dict(results_dict, new_result, n_users_evaluated_batch)
+#
+#
+#
+#
+#
+#
+#         for cutoff in self.cutoff_list:
+#             for key in results_dict[cutoff].keys():
+#                 results_dict[cutoff][key] /= len(self.usersToEvaluate)
+#
+#
+#
+#
+#
+#         if n_users_evaluated > 0:
+#
+#             for cutoff in self.cutoff_list:
+#
+#                 results_current_cutoff = results_dict[cutoff]
+#
+#                 for key in results_current_cutoff.keys():
+#
+#                     value = results_current_cutoff[key]
+#
+#                     if isinstance(value, Metrics_Object):
+#                         results_current_cutoff[key] = value.get_metric_value()
+#                     else:
+#                         results_current_cutoff[key] = value/n_users_evaluated
+#
+#                 precision_ = results_current_cutoff[EvaluatorMetrics.PRECISION.value]
+#                 recall_ = results_current_cutoff[EvaluatorMetrics.RECALL.value]
+#
+#                 if precision_ + recall_ != 0:
+#                     results_current_cutoff[EvaluatorMetrics.F1.value] = 2 * (precision_ * recall_) / (precision_ + recall_)
+#
+#
+#         else:
+#             print("WARNING: No users had a sufficient number of relevant items")
+#
+#
+#
+#
+#         sequential_evaluators_list = None
+#         sequential_evaluators_n_users_list = None
+#
+#
+#         if self.ignore_items_flag:
+#             recommender_object.reset_items_to_ignore()
+#
+#
+#
+#         results_run_string = get_result_string(results_dict)
+#
+#         return (results_dict, results_run_string)
+#
+#
+#
+
+
+
+
+
+class EvaluatorNegativeItemSample(Evaluator):
+    """EvaluatorNegativeItemSample"""
+
+    EVALUATOR_NAME = "EvaluatorNegativeItemSample"
 
     def __init__(self, URM_test_list, URM_test_negative, cutoff_list, minRatingsPerUser=1, exclude_seen=True,
                  diversity_object = None,
@@ -736,10 +756,10 @@ class LeaveOneOutEvaluator(Evaluator):
         """
 
 
-        super(LeaveOneOutEvaluator, self).__init__(URM_test_list, cutoff_list,
-                            diversity_object = diversity_object,
-                            minRatingsPerUser=minRatingsPerUser, exclude_seen=exclude_seen,
-                            ignore_items = ignore_items, ignore_users = ignore_users)
+        super(EvaluatorNegativeItemSample, self).__init__(URM_test_list, cutoff_list,
+                                                          diversity_object = diversity_object,
+                                                          minRatingsPerUser=minRatingsPerUser, exclude_seen=exclude_seen,
+                                                          ignore_items = ignore_items, ignore_users = ignore_users)
 
 
         self.URM_test_negative = sps.csr_matrix(URM_test_negative)
@@ -772,6 +792,26 @@ class LeaveOneOutEvaluator(Evaluator):
 
 
 
+    def get_user_specific_items_to_compute(self, user_id):
+
+        items_to_compute_for_user_mask = self.__no_items_mask.copy()
+
+        ### ADD negative samples
+        start_pos = self.URM_test_negative.indptr[user_id]
+        end_pos = self.URM_test_negative.indptr[user_id+1]
+
+        items_to_compute_for_user_mask[self.URM_test_negative.indices[start_pos:end_pos]] = True
+
+        ### ADD positive samples
+        start_pos = self.URM_test.indptr[user_id]
+        end_pos = self.URM_test.indptr[user_id+1]
+
+        items_to_compute_for_user_mask[self.URM_test.indices[start_pos:end_pos]] = True
+
+        return self.__all_items[items_to_compute_for_user_mask]
+
+
+
 
     def evaluateRecommender(self, recommender_object):
         """
@@ -800,7 +840,8 @@ class LeaveOneOutEvaluator(Evaluator):
         n_eval = 0
 
         self.__all_items = np.arange(0, self.n_items, dtype=np.int)
-        self.__all_items = set(self.__all_items)
+        self.__all_items_mask = np.ones(len(self.__all_items), dtype=np.bool)
+        self.__no_items_mask = np.zeros(len(self.__all_items), dtype=np.bool)
 
         if self.ignore_items_flag:
             recommender_object.set_items_to_ignore(self.ignore_items_ID)
@@ -811,23 +852,27 @@ class LeaveOneOutEvaluator(Evaluator):
 
             # Being the URM CSR, the indices are the non-zero column indexes
             relevant_items = self.get_user_relevant_items(test_user)
+            relevant_items_rating = self.get_user_test_ratings(test_user)
 
             n_eval += 1
 
             self.user_specific_remove_items(recommender_object, test_user)
+            items_to_compute = self.get_user_specific_items_to_compute(test_user)
 
-            # recommended_items = recommender_object.recommend(np.array(test_user), remove_seen_flag=self.exclude_seen,
-            #                                                  cutoff = self.max_cutoff, remove_top_pop_flag=False, remove_CustomItems_flag=self.ignore_items_flag)
-            recommended_items = recommender_object.recommend(np.atleast_1d(test_user),
+            recommended_items, all_items_predicted_ratings = recommender_object.recommend(np.atleast_1d(test_user),
                                                               remove_seen_flag=self.exclude_seen,
                                                               cutoff = self.max_cutoff,
                                                               remove_top_pop_flag=False,
-                                                              remove_CustomItems_flag=self.ignore_items_flag)
+                                                              items_to_compute = items_to_compute,
+                                                              remove_CustomItems_flag=self.ignore_items_flag,
+                                                              return_scores = True
+                                                             )
+
 
             recommended_items = np.array(recommended_items[0])
+            user_rmse = rmse(all_items_predicted_ratings[0], relevant_items, relevant_items_rating)
 
             recommender_object.reset_items_to_ignore()
-
 
             is_relevant = np.in1d(recommended_items, relevant_items, assume_unique=True)
 
@@ -841,15 +886,17 @@ class LeaveOneOutEvaluator(Evaluator):
                 recommended_items_current_cutoff = recommended_items[0:cutoff]
 
                 results_current_cutoff[EvaluatorMetrics.ROC_AUC.value]              += roc_auc(is_relevant_current_cutoff)
-                results_current_cutoff[EvaluatorMetrics.PRECISION.value]            += precision(is_relevant_current_cutoff, len(relevant_items))
+                results_current_cutoff[EvaluatorMetrics.PRECISION.value]            += precision(is_relevant_current_cutoff)
+                results_current_cutoff[EvaluatorMetrics.PRECISION_TEST_LEN.value]   += precision_min_test_len(is_relevant_current_cutoff, len(relevant_items))
                 results_current_cutoff[EvaluatorMetrics.RECALL.value]               += recall(is_relevant_current_cutoff, relevant_items)
                 results_current_cutoff[EvaluatorMetrics.RECALL_TEST_LEN.value]      += recall_min_test_len(is_relevant_current_cutoff, relevant_items)
-                results_current_cutoff[EvaluatorMetrics.MAP.value]                  += map(is_relevant_current_cutoff, relevant_items)
                 results_current_cutoff[EvaluatorMetrics.MRR.value]                  += rr(is_relevant_current_cutoff)
                 results_current_cutoff[EvaluatorMetrics.NDCG.value]                 += ndcg(recommended_items_current_cutoff, relevant_items, relevance=self.get_user_test_ratings(test_user), at=cutoff)
                 results_current_cutoff[EvaluatorMetrics.HIT_RATE.value]             += is_relevant_current_cutoff.sum()
                 results_current_cutoff[EvaluatorMetrics.ARHR.value]                 += arhr(is_relevant_current_cutoff)
+                results_current_cutoff[EvaluatorMetrics.RMSE.value]                 += user_rmse
 
+                results_current_cutoff[EvaluatorMetrics.MAP.value].add_recommendations(is_relevant_current_cutoff, relevant_items)
                 results_current_cutoff[EvaluatorMetrics.NOVELTY.value].add_recommendations(recommended_items_current_cutoff)
                 results_current_cutoff[EvaluatorMetrics.DIVERSITY_GINI.value].add_recommendations(recommended_items_current_cutoff)
                 results_current_cutoff[EvaluatorMetrics.SHANNON_ENTROPY.value].add_recommendations(recommended_items_current_cutoff)
@@ -863,10 +910,8 @@ class LeaveOneOutEvaluator(Evaluator):
 
 
 
-
-
             if time.time() - start_time_print > 30 or n_eval==len(self.usersToEvaluate):
-                print("SequentialEvaluator: Processed {} ( {:.2f}% ) in {:.2f} seconds. Users per second: {:.0f}".format(
+                print("EvaluatorHoldout: Processed {} ( {:.2f}% ) in {:.2f} seconds. Users per second: {:.0f}".format(
                               n_eval,
                               100.0* float(n_eval)/len(self.usersToEvaluate),
                               time.time()-start_time,
@@ -897,6 +942,7 @@ class LeaveOneOutEvaluator(Evaluator):
                 recall_ = results_current_cutoff[EvaluatorMetrics.RECALL.value]
 
                 if precision_ + recall_ != 0:
+                    # F1 micro averaged: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.104.8244&rep=rep1&type=pdf
                     results_current_cutoff[EvaluatorMetrics.F1.value] = 2 * (precision_ * recall_) / (precision_ + recall_)
 
 
@@ -909,6 +955,6 @@ class LeaveOneOutEvaluator(Evaluator):
 
 
 
-        results_run_string = self.get_result_string(results_dict)
+        results_run_string = get_result_string(results_dict)
 
         return (results_dict, results_run_string)
