@@ -15,6 +15,22 @@ Created on 07/09/17
 
 #defining NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
+
+"""
+Determine the operative system. The interface of numpy returns a different type for argsort under windows and linux
+
+http://docs.cython.org/en/latest/src/userguide/language_basics.html#conditional-compilation
+"""
+IF UNAME_SYSNAME == "linux":
+    DEF LONG_t = "long"
+ELIF  UNAME_SYSNAME == "Windows":
+    DEF LONG_t = "long long"
+ELSE:
+    DEF LONG_t = "long long"
+
+
+
+
 from Base.Recommender_utils import similarityMatrixTopK, check_matrix
 import numpy as np
 cimport numpy as np
@@ -56,7 +72,7 @@ cdef class SLIM_BPR_Cython_Epoch:
 
     # Adaptive gradient
 
-    cdef int useAdaGrad, useRmsprop, useAdam
+    cdef int useAdaGrad, useRmsprop, useAdam, verbose
 
     cdef double [:] sgd_cache_I
     cdef double gamma
@@ -72,6 +88,7 @@ cdef class SLIM_BPR_Cython_Epoch:
                  final_model_sparse_weights = True,
                  learning_rate = 0.01, li_reg = 0.0, lj_reg = 0.0,
                  batch_size = 1, topK = 150, symmetric = True,
+                 verbose = False,
                  sgd_mode='adam', gamma=0.995, beta_1=0.9, beta_2=0.999):
 
         super(SLIM_BPR_Cython_Epoch, self).__init__()
@@ -86,6 +103,7 @@ cdef class SLIM_BPR_Cython_Epoch:
         self.li_reg = li_reg
         self.lj_reg = lj_reg
         self.batch_size = batch_size
+        self.verbose = verbose
 
 
         if train_with_sparse_weights:
@@ -151,11 +169,20 @@ cdef class SLIM_BPR_Cython_Epoch:
         :return:
         """
 
-        if self.train_with_sparse_weights:
-            self.S_sparse.dealloc()
+        self._dealloc()
 
-        elif self.symmetric:
+
+    def _dealloc(self):
+
+        print("Deallocating Cython objects")
+
+        if self.S_sparse is not None:
+            self.S_sparse.dealloc()
+            self.S_sparse = None
+
+        if self.S_symmetric is not None:
             self.S_symmetric.dealloc()
+            self.S_symmetric = None
 
 
 
@@ -215,26 +242,6 @@ cdef class SLIM_BPR_Cython_Epoch:
 
             gradient = 1 / (1 + exp(x_uij))
             loss += x_uij**2
-
-
-            # if self.useAdaGrad:
-            #     cacheUpdate = gradient ** 2
-            #
-            #     sgd_cache[i] += cacheUpdate
-            #     sgd_cache[j] += cacheUpdate
-            #
-            #     gradient = gradient / (sqrt(sgd_cache[i]) + 1e-8)
-            #
-            # elif self.useRmsprop:
-            #     cacheUpdate = sgd_cache[i] * gamma + (1 - gamma) * gradient ** 2
-            #
-            #     sgd_cache[i] = cacheUpdate
-            #     sgd_cache[j] = cacheUpdate
-            #
-            #     gradient = gradient / (sqrt(sgd_cache[i]) + 1e-8)
-            #
-            #
-            # #######################################
 
 
             if self.useAdaGrad:
@@ -341,7 +348,7 @@ cdef class SLIM_BPR_Cython_Epoch:
                 self.S_sparse.rebalance_tree(TopK=self.topK)
 
 
-            if((numCurrentBatch%printStep==0 and not numCurrentBatch==0) or numCurrentBatch==totalNumberOfBatch-1):
+            if self.verbose and ((numCurrentBatch%printStep==0 and not numCurrentBatch==0) or numCurrentBatch==totalNumberOfBatch-1):
                 print("Processed {} ( {:.2f}% ) in {:.2f} seconds. BPR loss is {:.2E}. Sample per second: {:.0f}".format(
                     numCurrentBatch*self.batch_size,
                     100.0* float(numCurrentBatch*self.batch_size)/self.numPositiveIteractions,
@@ -388,7 +395,7 @@ cdef class SLIM_BPR_Cython_Epoch:
             else:
 
                 if self.final_model_sparse_weights:
-                    return similarityMatrixTopK(np.array(self.S_dense.T), k=self.topK, forceSparseOutput=True, inplace=True).T
+                    return similarityMatrixTopK(np.array(self.S_dense.T), k=self.topK).T
                 else:
                     return np.array(self.S_dense)
 
@@ -403,7 +410,7 @@ cdef class SLIM_BPR_Cython_Epoch:
 
             else:
                 if self.final_model_sparse_weights:
-                    return similarityMatrixTopK(np.array(self.S_dense.T), k=self.topK, forceSparseOutput=True, inplace=True).T
+                    return similarityMatrixTopK(np.array(self.S_dense.T), k=self.topK).T
                 else:
                     return np.array(self.S_dense)
 
@@ -732,11 +739,9 @@ cdef class Sparse_Matrix_Tree_CSR:
 
                 # Flatten the data structure
                 self.row_pointer[row].head = self.subtree_to_list_flat(self.row_pointer[row].head)
-                #print("subtree_to_list_flat {} sec".format(time.time() - start_time))
 
                 if TopK:
                     self.row_pointer[row].head = self.topK_selection_from_list(self.row_pointer[row].head, TopK)
-                    #print("topK_selection_from_list {} sec".format(time.time() - start_time))
 
 
                 # Flatten the tree data
@@ -746,7 +751,6 @@ cdef class Sparse_Matrix_Tree_CSR:
 
                 # Rebuild the tree
                 self.row_pointer[row].head = self.build_tree_from_list_flat(self.row_pointer[row].head)
-                #print("build_tree_from_list_flat {} sec".format(time.time() - start_time))
 
 
         #Set terminal indptr
@@ -773,15 +777,12 @@ cdef class Sparse_Matrix_Tree_CSR:
 
                 # Flatten the data structure
                 self.row_pointer[row].head = self.subtree_to_list_flat(self.row_pointer[row].head)
-                #print("subtree_to_list_flat {} sec".format(time.time() - start_time))
 
                 if TopK:
                     self.row_pointer[row].head = self.topK_selection_from_list(self.row_pointer[row].head, TopK)
-                    #print("topK_selection_from_list {} sec".format(time.time() - start_time))
 
                 # Rebuild the tree
                 self.row_pointer[row].head = self.build_tree_from_list_flat(self.row_pointer[row].head)
-                #print("build_tree_from_list_flat {} sec".format(time.time() - start_time))
 
 
 
@@ -1335,7 +1336,7 @@ cdef class Triangular_Matrix:
         cdef array[double] currentRowArray = clone(template_zero, self.num_cols, zero=True)
 
         # Declare numpy data type to use vetor indexing and simplify the topK selection code
-        cdef np.ndarray[long, ndim=1] top_k_partition, top_k_partition_sorting
+        cdef np.ndarray[LONG_t, ndim=1] top_k_partition, top_k_partition_sorting
         cdef np.ndarray[np.float64_t, ndim=1] currentRowArray_np
 
 

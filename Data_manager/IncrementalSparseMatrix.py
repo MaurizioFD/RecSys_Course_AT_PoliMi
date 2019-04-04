@@ -126,6 +126,10 @@ class IncrementalSparseMatrix_ListBased(object):
         return row_index
 
 
+    def get_nnz(self):
+        return len(self._row_list)
+
+
 
     def get_SparseMatrix(self):
 
@@ -153,7 +157,7 @@ import numpy as np
 
 class IncrementalSparseMatrix(IncrementalSparseMatrix_ListBased):
 
-    def __init__(self, auto_create_col_mapper = False, auto_create_row_mapper = False, n_rows = None, n_cols = None):
+    def __init__(self, auto_create_col_mapper = False, auto_create_row_mapper = False, n_rows = None, n_cols = None, dtype = np.float64):
 
         super(IncrementalSparseMatrix, self).__init__(auto_create_col_mapper = auto_create_col_mapper,
                                                              auto_create_row_mapper = auto_create_row_mapper,
@@ -163,24 +167,30 @@ class IncrementalSparseMatrix(IncrementalSparseMatrix_ListBased):
         self._dataBlock = 10000000
         self._next_cell_pointer = 0
 
-        self._row_array = np.zeros(self._dataBlock, dtype=np.int32)
-        self._col_array = np.zeros(self._dataBlock, dtype=np.int32)
-        self._data_array = np.zeros(self._dataBlock, dtype=np.float64)
+        self._dtype_data = dtype
+        self._dtype_coordinates = np.uint32
+        self._max_value_of_coordinate_dtype = np.iinfo(self._dtype_coordinates).max
 
+        self._row_array = np.zeros(self._dataBlock, dtype=self._dtype_coordinates)
+        self._col_array = np.zeros(self._dataBlock, dtype=self._dtype_coordinates)
+        self._data_array = np.zeros(self._dataBlock, dtype=self._dtype_data)
+
+
+    def get_nnz(self):
+        return self._next_cell_pointer
 
 
     def add_data_lists(self, row_list_to_add, col_list_to_add, data_list_to_add):
 
         assert len(row_list_to_add) == len(col_list_to_add) and len(row_list_to_add) == len(data_list_to_add),\
-            "IncrementalSparseMatrix: element lists must have different length"
-
+            "IncrementalSparseMatrix: element lists must have the same length"
 
         for data_point_index in range(len(row_list_to_add)):
 
             if self._next_cell_pointer == len(self._row_array):
-                self._row_array = np.concatenate((self._row_array, np.zeros(self._dataBlock, dtype=np.int32)))
-                self._col_array = np.concatenate((self._col_array, np.zeros(self._dataBlock, dtype=np.int32)))
-                self._data_array = np.concatenate((self._data_array, np.zeros(self._dataBlock, dtype=np.float64)))
+                self._row_array = np.concatenate((self._row_array, np.zeros(self._dataBlock, dtype=self._dtype_coordinates)))
+                self._col_array = np.concatenate((self._col_array, np.zeros(self._dataBlock, dtype=self._dtype_coordinates)))
+                self._data_array = np.concatenate((self._data_array, np.zeros(self._dataBlock, dtype=self._dtype_data)))
 
 
             row_index = self._get_row_index(row_list_to_add[data_point_index])
@@ -219,7 +229,8 @@ class IncrementalSparseMatrix(IncrementalSparseMatrix_ListBased):
 
         sparseMatrix = sps.csr_matrix((self._data_array[:self._next_cell_pointer],
                                        (self._row_array[:self._next_cell_pointer], self._col_array[:self._next_cell_pointer])),
-                                      shape=shape)
+                                      shape=shape,
+                                      dtype=self._dtype_data)
 
         sparseMatrix.eliminate_zeros()
 
@@ -240,7 +251,7 @@ class IncrementalSparseMatrix_FilterIDs(IncrementalSparseMatrix):
     """
 
     def __init__(self, preinitialized_col_mapper = None, preinitialized_row_mapper = None,
-                 on_new_col = "add", on_new_row = "add"):
+                 on_new_col = "add", on_new_row = "add", dtype = np.float64):
         """
         Possible behaviour is:
         - Automatically add new ids:    if_new_col = "add" and predefined_col_mapper = None or predefined_col_mapper = {dict}
@@ -253,7 +264,7 @@ class IncrementalSparseMatrix_FilterIDs(IncrementalSparseMatrix):
         :param n_cols:
         """
 
-        super(IncrementalSparseMatrix_FilterIDs, self).__init__()
+        super(IncrementalSparseMatrix_FilterIDs, self).__init__(dtype = dtype)
 
         self._row_list = []
         self._col_list = []
@@ -338,9 +349,9 @@ class IncrementalSparseMatrix_FilterIDs(IncrementalSparseMatrix):
         for data_point_index in range(len(row_list_to_add)):
 
             if self._next_cell_pointer == len(self._row_array):
-                self._row_array = np.concatenate((self._row_array, np.zeros(self._dataBlock, dtype=np.int32)))
-                self._col_array = np.concatenate((self._col_array, np.zeros(self._dataBlock, dtype=np.int32)))
-                self._data_array = np.concatenate((self._data_array, np.zeros(self._dataBlock, dtype=np.float64)))
+                self._row_array = np.concatenate((self._row_array, np.zeros(self._dataBlock, dtype=self._dtype_coordinates)))
+                self._col_array = np.concatenate((self._col_array, np.zeros(self._dataBlock, dtype=self._dtype_coordinates)))
+                self._data_array = np.concatenate((self._data_array, np.zeros(self._dataBlock, dtype=self._dtype_data)))
 
 
             row_index = self._get_row_index(row_list_to_add[data_point_index])

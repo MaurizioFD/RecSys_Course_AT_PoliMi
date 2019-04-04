@@ -13,6 +13,19 @@ Created on 23/10/17
 #cython: unpack_method_calls=True
 #cython: overflowcheck=False
 
+"""
+Determine the operative system. The interface of numpy returns a different type for argsort under windows and linux
+
+http://docs.cython.org/en/latest/src/userguide/language_basics.html#conditional-compilation
+"""
+IF UNAME_SYSNAME == "linux":
+    DEF LONG_t = "long"
+ELIF  UNAME_SYSNAME == "Windows":
+    DEF LONG_t = "long long"
+ELSE:
+    DEF LONG_t = "long long"
+
+
 
 import time, sys
 
@@ -25,15 +38,9 @@ from libc.math cimport sqrt
 
 
 
+
 import scipy.sparse as sps
 from Base.Recommender_utils import check_matrix
-
-#
-# ctypedef struct data_pointer_s:
-#     long start_position
-#     long num_elements
-
-
 
 
 cdef class Compute_Similarity_Cython:
@@ -309,29 +316,6 @@ cdef class Compute_Similarity_Cython:
 
 
 
-    #
-    # cdef data_pointer_s getUsersThatRatedItem_pointer(self, long item_id):
-    #
-    #     cdef data_pointer_s pointer = data_pointer_s()
-    #
-    #     pointer.start_position = self.item_to_user_col_ptr[item_id]
-    #     pointer.num_elements = self.item_to_user_col_ptr[item_id+1] - pointer.start_position
-    #
-    #     return pointer
-    #
-    # cdef data_pointer_s getItemsRatedByUser_pointer(self, long user_id):
-    #
-    #
-    #     cdef data_pointer_s pointer = data_pointer_s()
-    #
-    #     pointer.start_position = self.user_to_item_row_ptr[user_id]
-    #     pointer.num_elements = self.user_to_item_row_ptr[user_id+1] - pointer.start_position
-    #
-    #     return pointer
-
-
-
-
 
     cdef computeItemSimilarities(self, long item_id_input):
         """
@@ -436,7 +420,7 @@ cdef class Compute_Similarity_Cython:
         cdef long long[:] top_k_idx
 
         # Declare numpy data type to use vetor indexing and simplify the topK selection code
-        cdef np.ndarray[long, ndim=1] top_k_partition, top_k_partition_sorting
+        cdef np.ndarray[LONG_t, ndim=1] top_k_partition, top_k_partition_sorting
         cdef np.ndarray[np.float64_t, ndim=1] this_item_weights_np
         #cdef double[:] this_item_weights
 
@@ -614,166 +598,3 @@ cdef class Compute_Similarity_Cython:
                                     dtype=np.float32)
 
             return W_sparse
-
-
-
-
-
-def cosine_common(X):
-    """
-    Function that pairwise cosine similarity of the columns in X.
-    It takes only the values in common between each pair of columns
-    :param X: instance of scipy.sparse.csc_matrix
-    :return:
-        the result of co_prodsum
-        the number of co_rated elements for every column pair
-    """
-
-    X = check_matrix(X, 'csc')
-
-    # use Cython MemoryViews for fast access to the sparse structure of X
-    cdef int [:] indices = X.indices
-    cdef int [:] indptr = X.indptr
-    cdef float [:] data = X.data
-
-    # initialize the result variables
-    cdef int n_cols = X.shape[1]
-    cdef np.ndarray[np.float32_t, ndim=2] result = np.zeros([n_cols, n_cols], dtype=np.float32)
-    cdef np.ndarray[np.int32_t, ndim=2] common = np.zeros([n_cols, n_cols], dtype=np.int32)
-
-    # let's declare all the variables that we'll use in the loop here
-    # NOTE: declaring the type of your variables makes your Cython code run MUCH faster
-    # NOTE: Cython allows cdef's only in the main scope
-    # cdef's in nested codes will result in compilation errors
-    cdef int current_col, second_col, n_i, n_j, ii, jj, n_common
-    cdef float ii_sum, jj_sum, ij_sum, x_i, x_j
-
-    for current_col in range(n_cols):
-        n_i = indptr[current_col+1] - indptr[current_col]
-        # the correlation matrix is symmetric,
-        # let's compute only the values for the upper-right triangle
-        for second_col in range(current_col+1, n_cols):
-            n_j = indptr[second_col+1] - indptr[second_col]
-
-            ij_sum, ii_sum, jj_sum = 0.0, 0.0, 0.0
-            ii, jj = 0, 0
-            n_common = 0
-
-            # here we exploit the fact that the two subvectors in indices are sorted
-            # to compute the dot product of the rows in common between i and j in linear time.
-            # (indices[indptr[i]:indptr[i]+n_i] and indices[indptr[j]:indptr[j]+n_j]
-            # contain the row indices of the non-zero items in columns i and j)
-            while ii < n_i and jj < n_j:
-                if indices[indptr[current_col] + ii] < indices[indptr[second_col] + jj]:
-                    ii += 1
-                elif indices[indptr[current_col] + ii] > indices[indptr[second_col] + jj]:
-                    jj += 1
-                else:
-                    x_i = data[indptr[current_col] + ii]
-                    x_j = data[indptr[second_col] + jj]
-                    ij_sum += x_i * x_j
-                    ii_sum += x_i ** 2
-                    jj_sum += x_j ** 2
-                    ii += 1
-                    jj += 1
-                    n_common += 1
-
-            if n_common > 0:
-                result[current_col, second_col] = ij_sum / np.sqrt(ii_sum * jj_sum)
-                result[second_col, current_col] = result[current_col, second_col]
-                common[current_col, second_col] = n_common
-                common[second_col, current_col] = n_common
-
-    return result, common
-
-
-
-###################################################################################################################
-#########################
-#########################       ARGSORT
-#########################
-
-
-
-
-from libc.stdlib cimport malloc, free#, qsort
-
-# Declaring QSORT as "gil safe", appending "nogil" at the end of the declaration
-# Otherwise I will not be able to pass the comparator function pointer
-# https://stackoverflow.com/questions/8353076/how-do-i-pass-a-pointer-to-a-c-function-in-cython
-cdef extern from "stdlib.h":
-    ctypedef void const_void "const void"
-    void qsort(void *base, int nmemb, int size,
-            int(*compar)(const_void *, const_void *)) nogil
-
-
-
-# Node struct
-ctypedef struct matrix_element_s:
-    long coordinate
-    double data
-
-
-cdef int compare_struct_on_data(const void * a_input, const void * b_input):
-    """
-    The function compares the data contained in the two struct passed.
-    If a.data > b.data returns >0  
-    If a.data < b.data returns <0      
-    
-    :return int: +1 or -1
-    """
-
-    cdef matrix_element_s * a_casted = <matrix_element_s *> a_input
-    cdef matrix_element_s * b_casted = <matrix_element_s *> b_input
-
-    if (a_casted.data - b_casted.data) > 0.0:
-        return +1
-    else:
-        return -1
-
-
-
-
-
-cdef long[:] argsort(double[:] this_item_weights, int TopK):
-
-    #start_time = time.time()
-    cdef array[long] template_zero = array('l')
-    cdef array[long] result = clone(template_zero, TopK, zero=False)
-    #print("clone {} sec".format(time.time()-start_time))
-
-    cdef matrix_element_s *matrix_element_array
-    cdef int index, num_elements
-
-    num_elements = len(this_item_weights)
-
-    # Allocate vector that will be used for sorting
-    matrix_element_array = < matrix_element_s *> malloc(num_elements * sizeof(matrix_element_s))
-
-    #start_time = time.time()
-
-    # Fill vector wit pointers to list elements
-    for index in range(num_elements):
-        matrix_element_array[index].coordinate = index
-        matrix_element_array[index].data = this_item_weights[index]
-
-    #print("Init {} sec".format(time.time()-start_time))
-
-    #start_time = time.time()
-    # Sort array elements on their data field
-    qsort(matrix_element_array, num_elements, sizeof(matrix_element_s), compare_struct_on_data)
-    #print("qsort {} sec".format(time.time()-start_time))
-
-    #start_time = time.time()
-    # Sort is from lower to higher, therefore the elements to be considered are from len-topK to len
-    for index in range(TopK):
-
-        result[index] = matrix_element_array[num_elements - index - 1].coordinate
-    #print("result {} sec".format(time.time()-start_time))
-
-    free(matrix_element_array)
-
-
-
-    return result
-

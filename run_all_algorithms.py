@@ -2,10 +2,11 @@
 from SLIM_BPR.Cython.SLIM_BPR_Cython import SLIM_BPR_Cython
 from SLIM_ElasticNet.SLIMElasticNetRecommender import SLIMElasticNetRecommender
 
-from MatrixFactorization.Cython.MatrixFactorization_Cython import MatrixFactorization_BPR_Cython, MatrixFactorization_FunkSVD_Cython
-from MatrixFactorization.PureSVD import PureSVDRecommender
+from MatrixFactorization.Cython.MatrixFactorization_Cython import MatrixFactorization_BPR_Cython, MatrixFactorization_FunkSVD_Cython, MatrixFactorization_AsySVD_Cython
+from MatrixFactorization.PureSVDRecommender import PureSVDRecommender
+from MatrixFactorization.WRMFRecommender import WRMFRecommender
 
-from Base.NonPersonalizedRecommender import TopPop, Random
+from Base.NonPersonalizedRecommender import TopPop, Random, GlobalEffects
 
 from KNN.UserKNNCFRecommender import UserKNNCFRecommender
 from KNN.ItemKNNCFRecommender import ItemKNNCFRecommender
@@ -13,7 +14,8 @@ from KNN.ItemKNNCBFRecommender import ItemKNNCBFRecommender
 from GraphBased.RP3betaRecommender import RP3betaRecommender
 from GraphBased.P3alphaRecommender import P3alphaRecommender
 
-from data.Movielens_10M.Movielens10MReader import Movielens10MReader
+from Data_manager.Movielens10M.Movielens10MReader import Movielens10MReader
+from Data_manager.DataSplitter_leave_k_out import DataSplitter_leave_k_out
 
 import traceback, os
 
@@ -21,25 +23,29 @@ import traceback, os
 if __name__ == '__main__':
 
 
-    dataReader = Movielens10MReader()
+    dataset_object = Movielens10MReader()
 
-    URM_train = dataReader.get_URM_train()
-    URM_validation = dataReader.get_URM_validation()
-    URM_test = dataReader.get_URM_test()
+    dataSplitter = DataSplitter_leave_k_out(dataset_object, k_value=2)
+
+    dataSplitter.load_data()
+    URM_train, URM_validation, URM_test = dataSplitter.get_holdout_split()
 
     recommender_list = [
         Random,
         TopPop,
+        GlobalEffects,
+        UserKNNCFRecommender,
+        ItemKNNCFRecommender,
         P3alphaRecommender,
         RP3betaRecommender,
-        ItemKNNCFRecommender,
-        UserKNNCFRecommender,
+        SLIM_BPR_Cython,
+        SLIMElasticNetRecommender,
         MatrixFactorization_BPR_Cython,
         MatrixFactorization_FunkSVD_Cython,
+        MatrixFactorization_AsySVD_Cython,
         PureSVDRecommender,
-        SLIM_BPR_Cython,
-        SLIMElasticNetRecommender
-        ]
+        WRMFRecommender,
+    ]
 
 
     from Base.Evaluation.Evaluator import EvaluatorHoldout
@@ -47,7 +53,7 @@ if __name__ == '__main__':
     evaluator = EvaluatorHoldout(URM_test, [5, 20], exclude_seen=True)
 
 
-    output_root_path = "result_experiments/"
+    output_root_path = "./result_experiments/"
 
     # If directory does not exist, create
     if not os.path.exists(output_root_path):

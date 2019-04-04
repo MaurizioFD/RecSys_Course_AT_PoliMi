@@ -6,6 +6,13 @@ Created on 22/11/17
 @author: Maurizio Ferrari Dacrema
 """
 
+
+
+######################################################################
+##########                                                  ##########
+##########                  PURE COLLABORATIVE              ##########
+##########                                                  ##########
+######################################################################
 from Base.NonPersonalizedRecommender import TopPop, Random, GlobalEffects
 from KNN.UserKNNCFRecommender import UserKNNCFRecommender
 from KNN.ItemKNNCFRecommender import ItemKNNCFRecommender
@@ -13,17 +20,23 @@ from SLIM_BPR.Cython.SLIM_BPR_Cython import SLIM_BPR_Cython
 from SLIM_ElasticNet.SLIMElasticNetRecommender import SLIMElasticNetRecommender
 from GraphBased.P3alphaRecommender import P3alphaRecommender
 from GraphBased.RP3betaRecommender import RP3betaRecommender
-
-
-
-
 from MatrixFactorization.Cython.MatrixFactorization_Cython import MatrixFactorization_BPR_Cython, MatrixFactorization_FunkSVD_Cython, MatrixFactorization_AsySVD_Cython
-from MatrixFactorization.PureSVD import PureSVDRecommender
+from MatrixFactorization.PureSVDRecommender import PureSVDRecommender
+from MatrixFactorization.WRMFRecommender import WRMFRecommender
 
 
+
+######################################################################
+##########                                                  ##########
+##########                  PURE CONTENT BASED              ##########
+##########                                                  ##########
+######################################################################
+from KNN.ItemKNNCBFRecommender import ItemKNNCBFRecommender
+
+
+
+######################################################################
 from skopt.space import Real, Integer, Categorical
-
-
 import traceback
 from Utils.PoolWithSubprocess import PoolWithSubprocess
 
@@ -288,7 +301,7 @@ def runParameterSearch_Collaborative(recommender_class, URM_train, metric_to_opt
 
         ##########################################################################################################
 
-        if recommender_class is MatrixFactorization_FunkSVD_Cython:
+        if recommender_class in [MatrixFactorization_FunkSVD_Cython, MatrixFactorization_AsySVD_Cython]:
 
             hyperparamethers_range_dictionary = {}
             hyperparamethers_range_dictionary["sgd_mode"] = Categorical(["adagrad", "adam"])
@@ -304,7 +317,7 @@ def runParameterSearch_Collaborative(recommender_class, URM_train, metric_to_opt
                 FIT_KEYWORD_ARGS = {"validation_every_n": 5,
                                     "stop_on_validation": True,
                                     "evaluator_object": evaluator_validation_earlystopping,
-                                    "lower_validatons_allowed": 20,
+                                    "lower_validations_allowed": 20,
                                     "validation_metric": metric_to_optimize}
             )
 
@@ -330,9 +343,31 @@ def runParameterSearch_Collaborative(recommender_class, URM_train, metric_to_opt
                 FIT_KEYWORD_ARGS = {"validation_every_n": 5,
                                     "stop_on_validation": True,
                                     "evaluator_object": evaluator_validation_earlystopping,
-                                    "lower_validatons_allowed": 20,
+                                    "lower_validations_allowed": 20,
                                     "validation_metric": metric_to_optimize,
                                     "positive_threshold_BPR": None}
+            )
+
+        ##########################################################################################################
+
+        if recommender_class is WRMFRecommender:
+
+            hyperparamethers_range_dictionary = {}
+            hyperparamethers_range_dictionary["num_factors"] = Integer(1, 150)
+            hyperparamethers_range_dictionary["confidence_scaling"] = Categorical(["linear", "log"])
+            hyperparamethers_range_dictionary["alpha"] = Real(low = 1e-3, high = 50.0, prior = 'log-uniform')
+            hyperparamethers_range_dictionary["epsilon"] = Real(low = 1e-3, high = 10.0, prior = 'log-uniform')
+            hyperparamethers_range_dictionary["reg"] = Real(low = 1e-12, high = 1e-3, prior = 'log-uniform')
+
+            recommender_parameters = SearchInputRecommenderParameters(
+                CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
+                CONSTRUCTOR_KEYWORD_ARGS = {},
+                FIT_POSITIONAL_ARGS = [],
+                FIT_KEYWORD_ARGS = {"validation_every_n": 5,
+                                    "stop_on_validation": True,
+                                    "evaluator_object": evaluator_validation_earlystopping,
+                                    "lower_validations_allowed": 20,
+                                    "validation_metric": metric_to_optimize}
             )
 
 
@@ -358,20 +393,22 @@ def runParameterSearch_Collaborative(recommender_class, URM_train, metric_to_opt
             hyperparamethers_range_dictionary = {}
             hyperparamethers_range_dictionary["topK"] = Integer(5, 800)
             #hyperparamethers_range_dictionary["epochs"] = Integer(1, 150)
+            hyperparamethers_range_dictionary["symmetric"] = Categorical([True, False])
             hyperparamethers_range_dictionary["sgd_mode"] = Categorical(["adagrad", "adam"])
             hyperparamethers_range_dictionary["lambda_i"] = Real(low = 1e-12, high = 1e-3, prior = 'log-uniform')
             hyperparamethers_range_dictionary["lambda_j"] = Real(low = 1e-12, high = 1e-3, prior = 'log-uniform')
 
             recommender_parameters = SearchInputRecommenderParameters(
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
-                CONSTRUCTOR_KEYWORD_ARGS = {'train_with_sparse_weights':True, 'symmetric':True},
+                CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
                 FIT_KEYWORD_ARGS = {"validation_every_n": 5,
                                     "stop_on_validation": True,
                                     "evaluator_object": evaluator_validation_earlystopping,
-                                    "lower_validatons_allowed": 20,
+                                    "lower_validations_allowed": 20,
                                     "validation_metric": metric_to_optimize,
-                                    "positive_threshold_BPR": None}
+                                    "positive_threshold_BPR": None,
+                                    'train_with_sparse_weights':None}
             )
 
 
@@ -383,6 +420,7 @@ def runParameterSearch_Collaborative(recommender_class, URM_train, metric_to_opt
             hyperparamethers_range_dictionary = {}
             hyperparamethers_range_dictionary["topK"] = Integer(5, 800)
             hyperparamethers_range_dictionary["l1_ratio"] = Real(low = 1e-5, high = 1.0, prior = 'log-uniform')
+            hyperparamethers_range_dictionary["alpha"] = Real(low = 1e-3, high = 1.0, prior = 'uniform')
 
             recommender_parameters = SearchInputRecommenderParameters(
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],

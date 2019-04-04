@@ -8,25 +8,21 @@ import numpy as np
 import scipy.sparse as sps
 
 from sklearn.preprocessing import normalize
-from Base.Recommender import Recommender
 from Base.Recommender_utils import check_matrix, similarityMatrixTopK
 
-from Base.SimilarityMatrixRecommender import SimilarityMatrixRecommender
+from Base.BaseSimilarityMatrixRecommender import BaseSimilarityMatrixRecommender
 import time, sys
 
 
 
 
-class P3alphaRecommender(SimilarityMatrixRecommender, Recommender):
+class P3alphaRecommender(BaseSimilarityMatrixRecommender):
     """ P3alpha recommender """
 
     RECOMMENDER_NAME = "P3alphaRecommender"
 
     def __init__(self, URM_train):
-        super(P3alphaRecommender, self).__init__()
-
-        self.URM_train = check_matrix(URM_train, format='csr', dtype=np.float32)
-        self.sparse_weights = True
+        super(P3alphaRecommender, self).__init__(URM_train)
 
 
     def __str__(self):
@@ -140,5 +136,6 @@ class P3alphaRecommender(SimilarityMatrixRecommender, Recommender):
 
 
         if self.topK != False:
-            self.W_sparse = similarityMatrixTopK(self.W_sparse, forceSparseOutput = True, k=self.topK)
-            self.sparse_weights = True
+            self.W_sparse = similarityMatrixTopK(self.W_sparse, k=self.topK)
+
+        self.W_sparse = check_matrix(self.W_sparse, format='csr')

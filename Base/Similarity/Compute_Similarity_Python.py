@@ -271,23 +271,10 @@ class Compute_Similarity_Python:
         # Compute all similarities for each item using vectorization
         while start_col_block < end_col_local:
 
-            # Add previous block size
-            processedItems += this_block_size
 
             end_col_block = min(start_col_block + block_size, end_col_local)
             this_block_size = end_col_block-start_col_block
 
-
-            if time.time() - start_time_print_batch >= 30 or end_col_block==end_col_local:
-                columnPerSec = processedItems / (time.time() - start_time + 1e-9)
-
-                print("Similarity column {} ( {:2.0f} % ), {:.2f} column/sec, elapsed time {:.2f} min".format(
-                    processedItems, processedItems / (end_col_local - start_col_local) * 100, columnPerSec, (time.time() - start_time)/ 60))
-
-                sys.stdout.flush()
-                sys.stderr.flush()
-
-                start_time_print_batch = time.time()
 
 
             # All data points for a given item
@@ -369,7 +356,20 @@ class Compute_Similarity_Python:
                 cols.extend(np.ones(numNotZeros) * columnIndex)
 
 
+            # Add previous block size
+            processedItems += this_block_size
 
+
+            if time.time() - start_time_print_batch >= 30 or end_col_block==end_col_local:
+                columnPerSec = processedItems / (time.time() - start_time + 1e-9)
+
+                print("Similarity column {} ( {:2.0f} % ), {:.2f} column/sec, elapsed time {:.2f} min".format(
+                    processedItems, processedItems / (end_col_local - start_col_local) * 100, columnPerSec, (time.time() - start_time)/ 60))
+
+                sys.stdout.flush()
+                sys.stderr.flush()
+
+                start_time_print_batch = time.time()
 
 
             start_col_block += block_size

@@ -7,16 +7,15 @@
 
 import numpy as np
 import scipy.sparse as sps
-from Base.Recommender import Recommender
 from Base.Recommender_utils import check_matrix
 from sklearn.linear_model import ElasticNet
 
-from Base.SimilarityMatrixRecommender import SimilarityMatrixRecommender
+from Base.BaseSimilarityMatrixRecommender import BaseSimilarityMatrixRecommender
 import time, sys
 
 
 
-class SLIMElasticNetRecommender(SimilarityMatrixRecommender, Recommender):
+class SLIMElasticNetRecommender(BaseSimilarityMatrixRecommender):
     """
     Train a Sparse Linear Methods (SLIM) item similarity model.
     NOTE: ElasticNet solver is parallel, a single intance of SLIM_ElasticNet will
@@ -34,22 +33,20 @@ class SLIMElasticNetRecommender(SimilarityMatrixRecommender, Recommender):
     RECOMMENDER_NAME = "SLIMElasticNetRecommender"
 
     def __init__(self, URM_train):
-
-        super(SLIMElasticNetRecommender, self).__init__()
-
-        self.URM_train = URM_train
+        super(SLIMElasticNetRecommender, self).__init__(URM_train)
 
 
-    def fit(self, l1_ratio=0.1, positive_only=True, topK = 100):
+    def fit(self, l1_ratio=0.1, alpha = 1.0, positive_only=True, topK = 100,
+            verbose = True):
 
-        assert l1_ratio>= 0 and l1_ratio<=1, "SLIM_ElasticNet: l1_ratio must be between 0 and 1, provided value was {}".format(l1_ratio)
+        assert l1_ratio>= 0 and l1_ratio<=1, "{}: l1_ratio must be between 0 and 1, provided value was {}".format(self.RECOMMENDER_NAME, l1_ratio)
 
         self.l1_ratio = l1_ratio
         self.positive_only = positive_only
         self.topK = topK
 
         # initialize the ElasticNet model
-        self.model = ElasticNet(alpha=1.0,
+        self.model = ElasticNet(alpha=alpha,
                                 l1_ratio=self.l1_ratio,
                                 positive=self.positive_only,
                                 fit_intercept=False,
@@ -138,12 +135,14 @@ class SLIMElasticNetRecommender(SimilarityMatrixRecommender, Recommender):
             URM_train.data[start_pos:end_pos] = current_item_data_backup
 
 
-            if time.time() - start_time_printBatch > 300 or currentItem == n_items-1:
-                print("Processed {} ( {:.2f}% ) in {:.2f} minutes. Items per second: {:.0f}".format(
-                                  currentItem+1,
-                                  100.0* float(currentItem+1)/n_items,
-                                  (time.time()-start_time)/60,
-                                  float(currentItem)/(time.time()-start_time)))
+            if verbose and (time.time() - start_time_printBatch > 300 or currentItem == n_items-1):
+                print("{}: Processed {} ( {:.2f}% ) in {:.2f} minutes. Items per second: {:.0f}".format(
+                    self.RECOMMENDER_NAME,
+                    currentItem+1,
+                    100.0* float(currentItem+1)/n_items,
+                    (time.time()-start_time)/60,
+                    float(currentItem)/(time.time()-start_time)))
+
                 sys.stdout.flush()
                 sys.stderr.flush()
 
@@ -164,7 +163,7 @@ from multiprocessing import Pool
 from functools import partial
 import threading
 
-class MultiThreadSLIM_ElasticNet(SLIMElasticNetRecommender, SimilarityMatrixRecommender):
+class MultiThreadSLIM_ElasticNet(SLIMElasticNetRecommender, BaseSimilarityMatrixRecommender):
 
     def __init__(self, URM_train):
 
@@ -246,5 +245,5 @@ class MultiThreadSLIM_ElasticNet(SLIMElasticNetRecommender, SimilarityMatrixReco
             cols.extend(cols_)
 
         # generate the sparse weight matrix
-        self.W_sparse = sps.csc_matrix((values, (rows, cols)), shape=(n_items, n_items), dtype=np.float32)
+        self.W_sparse = sps.csr_matrix((values, (rows, cols)), shape=(n_items, n_items), dtype=np.float32)
 

@@ -6,10 +6,8 @@ Created on 23/10/17
 @author: Maurizio Ferrari Dacrema
 """
 
-
-from Base.Recommender import Recommender
 from Base.Recommender_utils import check_matrix
-from Base.SimilarityMatrixRecommender import SimilarityMatrixRecommender
+from Base.BaseSimilarityMatrixRecommender import BaseSimilarityMatrixRecommender
 
 from Base.IR_feature_weighting import okapi_BM_25, TF_IDF
 import numpy as np
@@ -17,7 +15,7 @@ import numpy as np
 from Base.Similarity.Compute_Similarity import Compute_Similarity
 
 
-class UserKNNCFRecommender(SimilarityMatrixRecommender, Recommender):
+class UserKNNCFRecommender(BaseSimilarityMatrixRecommender):
     """ UserKNN recommender"""
 
     RECOMMENDER_NAME = "UserKNNCFRecommender"
@@ -25,17 +23,16 @@ class UserKNNCFRecommender(SimilarityMatrixRecommender, Recommender):
     FEATURE_WEIGHTING_VALUES = ["BM25", "TF-IDF", "none"]
 
 
-    def __init__(self, URM_train, sparse_weights=True):
-        super(UserKNNCFRecommender, self).__init__()
-
-        # Not sure if CSR here is faster
-        self.URM_train = check_matrix(URM_train, 'csr')
-
-        self.dataset = None
-
-        self.sparse_weights = sparse_weights
+    def __init__(self, URM_train):
+        super(UserKNNCFRecommender, self).__init__(URM_train)
 
         self._compute_item_score = self._compute_score_user_based
+
+        cold_user_mask = np.ediff1d(self.URM_train.indptr) == 0
+
+        if cold_user_mask.any():
+            print("{}: Detected {} ({:.2f} %) cold users.".format(
+                self.RECOMMENDER_NAME, cold_user_mask.sum(), cold_user_mask.sum()/len(cold_user_mask)*100))
 
 
 
@@ -60,9 +57,5 @@ class UserKNNCFRecommender(SimilarityMatrixRecommender, Recommender):
 
         similarity = Compute_Similarity(self.URM_train.T, shrink=shrink, topK=topK, normalize=normalize, similarity = similarity, **similarity_args)
 
-        if self.sparse_weights:
-            self.W_sparse = similarity.compute_similarity()
-        else:
-            self.W = similarity.compute_similarity()
-            self.W = self.W.toarray()
-
+        self.W_sparse = similarity.compute_similarity()
+        self.W_sparse = check_matrix(self.W_sparse, format='csr')

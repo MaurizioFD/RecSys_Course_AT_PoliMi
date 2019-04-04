@@ -43,6 +43,7 @@ cdef class MatrixFactorization_Cython_Epoch:
 
     cdef int n_users, n_items, n_factors
     cdef int numPositiveIteractions
+    cdef algorithm_name
 
     cdef float learning_rate, user_reg, positive_reg, negative_reg
 
@@ -50,14 +51,14 @@ cdef class MatrixFactorization_Cython_Epoch:
 
     cdef int algorithm_is_funk_svd, algorithm_is_asy_svd, algorithm_is_BPR
 
-    cdef int[:] URM_train_indices, URM_train_indptr
+    cdef int[:] URM_train_indices, URM_train_indptr, profile_length
     cdef double[:] URM_train_data
 
-    cdef double[:,:] USER_factors, ITEM_factors
+    cdef double[:,:] USER_factors, ITEM_factors, ITEM_factors_Y
 
 
     # Adaptive gradient
-    cdef int useAdaGrad, useRmsprop, useAdam
+    cdef int useAdaGrad, useRmsprop, useAdam, verbose
 
     cdef double [:] sgd_cache_I, sgd_cache_U
     cdef double gamma
@@ -68,8 +69,9 @@ cdef class MatrixFactorization_Cython_Epoch:
     cdef double momentum_1, momentum_2
 
 
-    def __init__(self, URM_train, n_factors = 10, algorithm = "FUNK_SVD",
+    def __init__(self, URM_train, n_factors = 10, algorithm_name = "FUNK_SVD",
                  learning_rate = 0.01, user_reg = 0.0, positive_reg = 0.0, negative_reg = 0.0,
+                 verbose = False,
                  batch_size = 1, sgd_mode='sgd', gamma=0.995, beta_1=0.9, beta_2=0.999):
 
         super(MatrixFactorization_Cython_Epoch, self).__init__()
@@ -80,7 +82,10 @@ cdef class MatrixFactorization_Cython_Epoch:
         self.numPositiveIteractions = int(URM_train.nnz * 1)
         self.n_users = URM_train.shape[0]
         self.n_items = URM_train.shape[1]
+        self.profile_length = np.ediff1d(URM_train.indptr)
         self.n_factors = n_factors
+        self.verbose = verbose
+        self.algorithm_name = algorithm_name
 
         self.URM_train_indices = URM_train.indices
         self.URM_train_data = np.array(URM_train.data, dtype=np.float64)
@@ -92,19 +97,19 @@ cdef class MatrixFactorization_Cython_Epoch:
         self.algorithm_is_BPR = False
 
 
-        if algorithm == "FUNK_SVD":
+        if self.algorithm_name == "FUNK_SVD":
             self.algorithm_is_funk_svd = True
             # W and H cannot be initialized as zero, otherwise the gradient will always be zero
             self.USER_factors = np.random.random((self.n_users, self.n_factors))
             self.ITEM_factors = np.random.random((self.n_items, self.n_factors))
 
-        elif algorithm == "ASY_SVD":
+        elif self.algorithm_name == "ASY_SVD":
             self.algorithm_is_asy_svd = True
             # W and H cannot be initialized as zero, otherwise the gradient will always be zero
             self.USER_factors = np.random.random((self.n_items, self.n_factors))
             self.ITEM_factors = np.random.random((self.n_items, self.n_factors))
 
-        elif algorithm == "MF_BPR":
+        elif self.algorithm_name == "MF_BPR":
             self.algorithm_is_BPR = True
             # W and H cannot be initialized as zero, otherwise the gradient will always be zero
             self.USER_factors = np.random.random((self.n_users, self.n_factors))
@@ -112,6 +117,7 @@ cdef class MatrixFactorization_Cython_Epoch:
 
         else:
             raise ValueError("Loss value not recognized")
+
 
 
 
@@ -194,11 +200,10 @@ cdef class MatrixFactorization_Cython_Epoch:
     def epochIteration_Cython_FUNK_SVD_SGD(self):
 
         # Get number of available interactions
-        cdef long totalNumberOfBatch = int(len(self.URM_train_data) / self.batch_size) + 1
+        cdef long num_total_batch = int(len(self.URM_train_data) / self.batch_size) + 1
 
         cdef MSE_sample sample
-        cdef long u, i
-        cdef long index, numCurrentBatch, processed_samples_last_print, print_block_size = 500
+        cdef long factor_index, num_current_batch, processed_samples_last_print, print_block_size = 500
         cdef double prediction, gradient, adaptive_gradient_item, adaptive_gradient_user
 
         cdef int numSeenItems
@@ -210,15 +215,15 @@ cdef class MatrixFactorization_Cython_Epoch:
         cdef long start_time_epoch = time.time()
         cdef long last_print_time = start_time_epoch
 
-        for numCurrentBatch in range(totalNumberOfBatch):
+        for num_current_batch in range(num_total_batch):
 
             # Uniform user sampling with replacement
             sample = self.sampleMSE_Cython()
 
             prediction = 0.0
 
-            for index in range(self.n_factors):
-                prediction += self.USER_factors[sample.user, index] * self.ITEM_factors[sample.item, index]
+            for factor_index in range(self.n_factors):
+                prediction += self.USER_factors[sample.user, factor_index] * self.ITEM_factors[sample.item, factor_index]
 
             gradient = sample.rating - prediction
             cumulative_loss += gradient**2
@@ -227,35 +232,36 @@ cdef class MatrixFactorization_Cython_Epoch:
             adaptive_gradient_user = self.adaptive_gradient_user(gradient, sample.user)
 
 
-            for index in range(self.n_factors):
+            for factor_index in range(self.n_factors):
 
                 # Copy original value to avoid messing up the updates
-                H_i = self.ITEM_factors[sample.item, index]
-                W_u = self.USER_factors[sample.user, index]
+                H_i = self.ITEM_factors[sample.item, factor_index]
+                W_u = self.USER_factors[sample.user, factor_index]
 
-                self.USER_factors[sample.user, index] += self.learning_rate * (adaptive_gradient_user * H_i - self.user_reg * W_u)
-                self.ITEM_factors[sample.item, index] += self.learning_rate * (adaptive_gradient_item * W_u - self.positive_reg * H_i)
-
-
+                self.USER_factors[sample.user, factor_index] += self.learning_rate * (adaptive_gradient_user * H_i - self.user_reg * W_u)
+                self.ITEM_factors[sample.item, factor_index] += self.learning_rate * (adaptive_gradient_item * W_u - self.positive_reg * H_i)
 
 
-            if processed_samples_last_print >= print_block_size or numCurrentBatch == totalNumberOfBatch-1:
+
+
+            if self.verbose and (processed_samples_last_print >= print_block_size or num_current_batch == num_total_batch-1):
 
                 current_time = time.time()
 
                 # Set block size to the number of items necessary in order to print every 30 seconds
-                samples_per_sec = numCurrentBatch/(time.time() - start_time_epoch)
+                samples_per_sec = num_current_batch/(time.time() - start_time_epoch)
 
                 print_block_size = int(samples_per_sec*30)
 
-                if current_time - last_print_time > 30 or numCurrentBatch == totalNumberOfBatch-1:
+                if current_time - last_print_time > 30 or num_current_batch == num_total_batch-1:
 
-                    print("Processed {} ( {:.2f}% ) in {:.2f} seconds. MSE loss {:.2E}. Sample per second: {:.0f}".format(
-                        numCurrentBatch*self.batch_size,
-                        100.0* numCurrentBatch/totalNumberOfBatch,
+                    print("{}: Processed {} ( {:.2f}% ) in {:.2f} seconds. MSE loss {:.2E}. Sample per second: {:.0f}".format(
+                        self.algorithm_name,
+                        num_current_batch*self.batch_size,
+                        100.0* num_current_batch/num_total_batch,
                         time.time() - last_print_time,
-                        cumulative_loss/(numCurrentBatch*self.batch_size + 1),
-                        float(numCurrentBatch*self.batch_size + 1) / (time.time() - start_time_epoch)))
+                        cumulative_loss/(num_current_batch*self.batch_size + 1),
+                        float(num_current_batch*self.batch_size + 1) / (time.time() - start_time_epoch)))
 
                     last_print_time = current_time
                     processed_samples_last_print = 0
@@ -270,17 +276,16 @@ cdef class MatrixFactorization_Cython_Epoch:
     def epochIteration_Cython_ASY_SVD_SGD(self):
 
         # Get number of available interactions
-        cdef long totalNumberOfBatch = int(len(self.URM_train_data) / self.batch_size) + 1
+        cdef long num_total_batch = int(len(self.URM_train_data) / self.batch_size) + 1
 
         cdef MSE_sample sample
-        cdef long u, i
-        cdef long index, numCurrentBatch, processed_samples_last_print, print_block_size = 500
+        cdef long num_current_batch, processed_samples_last_print, print_block_size = 500
         cdef double prediction, gradient, adaptive_gradient_item, adaptive_gradient_user
 
         cdef int numSeenItems
 
         cdef double[:] user_factors_accumulated = np.zeros(self.n_factors, dtype=np.float64)
-        cdef long start_pos_seen_items, end_pos_seen_items, item_id, factor_index, item_index
+        cdef long start_pos_seen_items, end_pos_seen_items, item_id, factor_index, item_index, user_index
 
         cdef double H_i, W_u, cumulative_loss = 0.0, denominator
 
@@ -289,7 +294,7 @@ cdef class MatrixFactorization_Cython_Epoch:
         cdef long last_print_time = start_time_epoch
 
 
-        for numCurrentBatch in range(totalNumberOfBatch):
+        for num_current_batch in range(num_total_batch):
 
             # Uniform user sampling with replacement
             sample = self.sampleMSE_Cython()
@@ -311,41 +316,22 @@ cdef class MatrixFactorization_Cython_Epoch:
                     user_factors_accumulated[factor_index] += self.USER_factors[item_id, factor_index]
 
 
-            denominator = sqrt(end_pos_seen_items - start_pos_seen_items)
+            denominator = sqrt(self.profile_length[sample.user])
 
 
             for factor_index in range(self.n_factors):
-                #print("user_factors_accumulated[factor_index] " + str(user_factors_accumulated[factor_index]))
                 user_factors_accumulated[factor_index] /= denominator
-                #print("user_factors_accumulated[factor_index] " + str(user_factors_accumulated[factor_index]))
-                #print("denominator " + str(denominator))
-
-
-            # print(np.array(user_factors_accumulated))
-            # input()
-
 
             # Compute prediction
             for factor_index in range(self.n_factors):
                 prediction += user_factors_accumulated[factor_index] * self.ITEM_factors[sample.item, factor_index]
-                if np.isnan(prediction):
-                    print("user_factors_accumulated[factor_index] " + str(user_factors_accumulated[factor_index]))
-                    print("self.ITEM_factors[sample.item, factor_index] " + str(self.ITEM_factors[sample.item, factor_index]))
 
 
             gradient = sample.rating - prediction
             cumulative_loss += gradient**2
 
-            if np.isnan(cumulative_loss):
-                print("sample.rating " + str(sample.rating))
-                print("prediction " + str(prediction))
-                input()
-            # print(cumulative_loss/(numCurrentBatch*self.batch_size + 1))
-            # input()
-
-
             adaptive_gradient_item = self.adaptive_gradient_item(gradient, sample.item)
-            adaptive_gradient_user = self.adaptive_gradient_user(gradient, sample.user)
+            adaptive_gradient_user = self.adaptive_gradient_user(gradient, sample.item)
 
 
             # Update USER factors, therefore all item factors for seen items
@@ -357,9 +343,6 @@ cdef class MatrixFactorization_Cython_Epoch:
                     H_i = self.ITEM_factors[sample.item, factor_index]
                     W_u = self.USER_factors[item_id, factor_index]
 
-                    # print(H_i)
-                    # print(W_u)
-
                     self.USER_factors[item_id, factor_index] += self.learning_rate * (adaptive_gradient_user * H_i - self.user_reg * W_u)
 
 
@@ -369,31 +352,30 @@ cdef class MatrixFactorization_Cython_Epoch:
                 # Copy original value to avoid messing up the updates
                 H_i = self.ITEM_factors[sample.item, factor_index]
                 W_u = user_factors_accumulated[factor_index]
-                print("H_i" + str(H_i))
-                print("W_u" + str(W_u))
+
                 self.ITEM_factors[sample.item, factor_index] += self.learning_rate * (adaptive_gradient_item * W_u - self.positive_reg * H_i)
 
 
 
 
-
-            if processed_samples_last_print >= print_block_size or numCurrentBatch == totalNumberOfBatch-1:
+            if self.verbose and (processed_samples_last_print >= print_block_size or num_current_batch == num_total_batch-1):
 
                 current_time = time.time()
 
                 # Set block size to the number of items necessary in order to print every 30 seconds
-                samples_per_sec = numCurrentBatch/(time.time() - start_time_epoch)
+                samples_per_sec = num_current_batch/(time.time() - start_time_epoch)
 
                 print_block_size = int(samples_per_sec*30)
 
-                if current_time - last_print_time > 30 or numCurrentBatch == totalNumberOfBatch-1:
+                if current_time - last_print_time > 30 or num_current_batch == num_total_batch-1:
 
-                    print("Processed {} ( {:.2f}% ) in {:.2f} seconds. MSE loss {:.2E}. Sample per second: {:.0f}".format(
-                        numCurrentBatch*self.batch_size,
-                        100.0* numCurrentBatch/totalNumberOfBatch,
+                    print("{}: Processed {} ( {:.2f}% ) in {:.2f} seconds. MSE loss {:.2E}. Sample per second: {:.0f}".format(
+                        self.algorithm_name,
+                        num_current_batch*self.batch_size,
+                        100.0* num_current_batch/num_total_batch,
                         time.time() - last_print_time,
-                        cumulative_loss/(numCurrentBatch*self.batch_size + 1),
-                        float(numCurrentBatch*self.batch_size + 1) / (time.time() - start_time_epoch)))
+                        cumulative_loss/(num_current_batch*self.batch_size + 1),
+                        float(num_current_batch*self.batch_size + 1) / (time.time() - start_time_epoch)))
 
                     last_print_time = current_time
                     processed_samples_last_print = 0
@@ -403,16 +385,15 @@ cdef class MatrixFactorization_Cython_Epoch:
 
 
 
-
     def epochIteration_Cython_BPR_SGD(self):
 
         # Get number of available interactions
-        cdef long totalNumberOfBatch = int(self.n_users / self.batch_size) + 1
+        cdef long num_total_batch = int(self.n_users / self.batch_size) + 1
 
 
         cdef BPR_sample sample
         cdef long u, i, j
-        cdef long index, numCurrentBatch, processed_samples_last_print, print_block_size = 500
+        cdef long factor_index, num_current_batch, processed_samples_last_print, print_block_size = 500
         cdef double x_uij, sigmoid_user, sigmoid_item
 
         cdef int numSeenItems
@@ -424,7 +405,7 @@ cdef class MatrixFactorization_Cython_Epoch:
         cdef long start_time_epoch = time.time()
         cdef long last_print_time = start_time_epoch
 
-        for numCurrentBatch in range(totalNumberOfBatch):
+        for num_current_batch in range(num_total_batch):
 
             # Uniform user sampling with replacement
             sample = self.sampleBPR_Cython()
@@ -435,8 +416,8 @@ cdef class MatrixFactorization_Cython_Epoch:
 
             x_uij = 0.0
 
-            for index in range(self.n_factors):
-                x_uij += self.USER_factors[u,index] * (self.ITEM_factors[i,index] - self.ITEM_factors[j,index])
+            for factor_index in range(self.n_factors):
+                x_uij += self.USER_factors[u,factor_index] * (self.ITEM_factors[i,factor_index] - self.ITEM_factors[j,factor_index])
 
             # Use gradient of log(sigm(-x_uij))
             sigmoid_item = 1 / (1 + exp(x_uij))
@@ -452,38 +433,38 @@ cdef class MatrixFactorization_Cython_Epoch:
 
 
 
-            for index in range(self.n_factors):
+            for factor_index in range(self.n_factors):
 
                 # Copy original value to avoid messing up the updates
-                H_i = self.ITEM_factors[i, index]
-                H_j = self.ITEM_factors[j, index]
-                W_u = self.USER_factors[u, index]
+                H_i = self.ITEM_factors[i, factor_index]
+                H_j = self.ITEM_factors[j, factor_index]
+                W_u = self.USER_factors[u, factor_index]
 
-                self.USER_factors[u, index] += self.learning_rate * (sigmoid_user * ( H_i - H_j ) - self.user_reg * W_u)
-                self.ITEM_factors[i, index] += self.learning_rate * (sigmoid_item_i * ( W_u ) - self.positive_reg * H_i)
-                self.ITEM_factors[j, index] += self.learning_rate * (sigmoid_item_j * (-W_u ) - self.negative_reg * H_j)
-
-
+                self.USER_factors[u, factor_index] += self.learning_rate * (sigmoid_user * ( H_i - H_j ) - self.user_reg * W_u)
+                self.ITEM_factors[i, factor_index] += self.learning_rate * (sigmoid_item_i * ( W_u ) - self.positive_reg * H_i)
+                self.ITEM_factors[j, factor_index] += self.learning_rate * (sigmoid_item_j * (-W_u ) - self.negative_reg * H_j)
 
 
 
-            if processed_samples_last_print >= print_block_size or numCurrentBatch == totalNumberOfBatch-1:
+
+            if self.verbose and (processed_samples_last_print >= print_block_size or num_current_batch == num_total_batch-1):
 
                 current_time = time.time()
 
                 # Set block size to the number of items necessary in order to print every 30 seconds
-                samples_per_sec = numCurrentBatch/(time.time() - start_time_epoch)
+                samples_per_sec = num_current_batch/(time.time() - start_time_epoch)
 
                 print_block_size = int(samples_per_sec*30)
 
-                if current_time - last_print_time > 30 or numCurrentBatch == totalNumberOfBatch-1:
+                if current_time - last_print_time > 30 or num_current_batch == num_total_batch-1:
 
-                    print("Processed {} ( {:.2f}% ) in {:.2f} seconds. BPR loss {:.2E}. Sample per second: {:.0f}".format(
-                        numCurrentBatch*self.batch_size,
-                        100.0* numCurrentBatch/totalNumberOfBatch,
+                    print("{}: Processed {} ( {:.2f}% ) in {:.2f} seconds. BPR loss {:.2E}. Sample per second: {:.0f}".format(
+                        self.algorithm_name,
+                        num_current_batch*self.batch_size,
+                        100.0* num_current_batch/num_total_batch,
                         time.time() - last_print_time,
-                        cumulative_loss/(numCurrentBatch*self.batch_size + 1),
-                        float(numCurrentBatch*self.batch_size + 1) / (time.time() - start_time_epoch)))
+                        cumulative_loss/(num_current_batch*self.batch_size + 1),
+                        float(num_current_batch*self.batch_size + 1) / (time.time() - start_time_epoch)))
 
                     last_print_time = current_time
                     processed_samples_last_print = 0
@@ -499,11 +480,11 @@ cdef class MatrixFactorization_Cython_Epoch:
 
 
 
-    def get_W(self):
+    def get_USER_factors(self):
         return np.array(self.USER_factors)
 
 
-    def get_H(self):
+    def get_ITEM_factors(self):
         return np.array(self.ITEM_factors)
 
 

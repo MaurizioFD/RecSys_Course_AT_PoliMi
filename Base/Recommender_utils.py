@@ -11,6 +11,18 @@ import time
 import os
 
 def check_matrix(X, format='csc', dtype=np.float32):
+    """
+    This function takes a matrix as input and transforms it into the specified format.
+    The matrix in input can be either sparse or ndarray.
+    If the matrix in input has already the desired format, it is returned as-is
+    the dtype parameter is always applied and the default is np.float32
+    :param X:
+    :param format:
+    :param dtype:
+    :return:
+    """
+
+
     if format == 'csc' and not isinstance(X, sps.csc_matrix):
         return X.tocsc().astype(dtype)
     elif format == 'csr' and not isinstance(X, sps.csr_matrix):
@@ -25,11 +37,15 @@ def check_matrix(X, format='csc', dtype=np.float32):
         return X.todia().astype(dtype)
     elif format == 'lil' and not isinstance(X, sps.lil_matrix):
         return X.tolil().astype(dtype)
+    elif isinstance(X, np.ndarray):
+        X = sps.csr_matrix(X, dtype=dtype)
+        X.eliminate_zeros()
+        return check_matrix(X, format=format, dtype=dtype)
     else:
         return X.astype(dtype)
 
 
-def similarityMatrixTopK(item_weights, forceSparseOutput = True, k=100, verbose = False, inplace=True):
+def similarityMatrixTopK(item_weights, k=100, verbose = False):
     """
     The function selects the TopK most similar elements, column-wise
 
@@ -54,68 +70,49 @@ def similarityMatrixTopK(item_weights, forceSparseOutput = True, k=100, verbose 
     # for each column, keep only the top-k scored items
     sparse_weights = not isinstance(item_weights, np.ndarray)
 
-    if not sparse_weights:
+    # iterate over each column and keep only the top-k similar items
+    data, rows_indices, cols_indptr = [], [], []
 
-        idx_sorted = np.argsort(item_weights, axis=0)  # sort data inside each column
-
-        if inplace:
-            W = item_weights
-        else:
-            W = item_weights.copy()
-
-        # index of the items that don't belong to the top-k similar items of each column
-        not_top_k = idx_sorted[:-k, :]
-        # use numpy fancy indexing to zero-out the values in sim without using a for loop
-        W[not_top_k, np.arange(nitems)] = 0.0
-
-        if forceSparseOutput:
-            W_sparse = sps.csr_matrix(W, shape=(nitems, nitems))
-
-            if verbose:
-                print("Sparse TopK matrix generated in {:.2f} seconds".format(time.time() - start_time))
-
-            return W_sparse
-
-        if verbose:
-            print("Dense TopK matrix generated in {:.2f} seconds".format(time.time()-start_time))
-
-        return W
-
-    else:
-        # iterate over each column and keep only the top-k similar items
-        data, rows_indices, cols_indptr = [], [], []
-
+    if sparse_weights:
         item_weights = check_matrix(item_weights, format='csc', dtype=np.float32)
+    else:
+        column_row_index = np.arange(nitems, dtype=np.int32)
 
-        for item_idx in range(nitems):
 
-            cols_indptr.append(len(data))
 
+    for item_idx in range(nitems):
+
+        cols_indptr.append(len(data))
+
+        if sparse_weights:
             start_position = item_weights.indptr[item_idx]
             end_position = item_weights.indptr[item_idx+1]
 
             column_data = item_weights.data[start_position:end_position]
             column_row_index = item_weights.indices[start_position:end_position]
 
-            non_zero_data = column_data!=0
-
-            idx_sorted = np.argsort(column_data[non_zero_data])  # sort by column
-            top_k_idx = idx_sorted[-k:]
-
-            data.extend(column_data[non_zero_data][top_k_idx])
-            rows_indices.extend(column_row_index[non_zero_data][top_k_idx])
+        else:
+            column_data = item_weights[:,item_idx]
 
 
-        cols_indptr.append(len(data))
+        non_zero_data = column_data!=0
 
-        # During testing CSR is faster
-        W_sparse = sps.csc_matrix((data, rows_indices, cols_indptr), shape=(nitems, nitems), dtype=np.float32)
-        W_sparse = W_sparse.tocsr()
+        idx_sorted = np.argsort(column_data[non_zero_data])  # sort by column
+        top_k_idx = idx_sorted[-k:]
 
-        if verbose:
-            print("Sparse TopK matrix generated in {:.2f} seconds".format(time.time() - start_time))
+        data.extend(column_data[non_zero_data][top_k_idx])
+        rows_indices.extend(column_row_index[non_zero_data][top_k_idx])
 
-        return W_sparse
+
+    cols_indptr.append(len(data))
+
+    # During testing CSR is faster
+    W_sparse = sps.csc_matrix((data, rows_indices, cols_indptr), shape=(nitems, nitems), dtype=np.float32)
+
+    if verbose:
+        print("Sparse TopK matrix generated in {:.2f} seconds".format(time.time() - start_time))
+
+    return W_sparse
 
 
 
@@ -164,36 +161,6 @@ def removeTopPop(URM_1, URM_2=None, percentageToRemove=0.2):
     removedItems = np.arange(len(popularItemsSorted))[np.logical_not(itemMask)]
 
     return URM_1[:,itemMask], itemMappings, removedItems
-
-#
-#
-# def load_edges (filePath, header = False):
-#
-#     values, rows, cols = [], [], []
-#
-#     fileHandle = open(filePath, "r")
-#     numCells = 0
-#
-#     if header:
-#         fileHandle.readline()
-#
-#     for line in fileHandle:
-#         numCells += 1
-#         if (numCells % 1000000 == 0):
-#             print("Processed {} cells".format(numCells))
-#
-#         if (len(line)) > 1:
-#             line = line.split(",")
-#
-#             value = line[2].replace("\n", "")
-#
-#             if not value == "0" and not value == "NaN":
-#                 rows.append(int(line[0]))
-#                 cols.append(int(line[1]))
-#                 values.append(float(value))
-#
-#     return  sps.csr_matrix((values, (rows, cols)), dtype=np.float32)
-
 
 
 def addZeroSamples(S_matrix, numSamplesToAdd):

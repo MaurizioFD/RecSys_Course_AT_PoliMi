@@ -14,7 +14,7 @@ from SLIM_ElasticNet.SLIMElasticNetRecommender import SLIMElasticNetRecommender
 from GraphBased.P3alphaRecommender import P3alphaRecommender
 from GraphBased.RP3betaRecommender import RP3betaRecommender
 from MatrixFactorization.Cython.MatrixFactorization_Cython import MatrixFactorization_BPR_Cython, MatrixFactorization_FunkSVD_Cython
-from MatrixFactorization.PureSVD import PureSVDRecommender
+from MatrixFactorization.PureSVDRecommender import PureSVDRecommender
 
 import traceback
 

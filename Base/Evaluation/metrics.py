@@ -39,7 +39,8 @@ class Coverage_Item(Metrics_Object):
         self.n_ignore_items = len(ignore_items)
 
     def add_recommendations(self, recommended_items_ids):
-        self.recommended_mask[recommended_items_ids] = True
+        if len(recommended_items_ids) > 0:
+            self.recommended_mask[recommended_items_ids] = True
 
     def get_metric_value(self):
         return self.recommended_mask.sum()/(len(self.recommended_mask)-self.n_ignore_items)
@@ -106,6 +107,35 @@ class MAP(Metrics_Object):
 
 
 
+
+class MRR(Metrics_Object):
+    """
+    Mean Reciprocal Rank, defined as the mean of the Reciprocal Rank over all users
+
+    """
+
+    def __init__(self):
+        super(MRR, self).__init__()
+        self.cumulative_RR = 0.0
+        self.n_users = 0
+
+    def add_recommendations(self, is_relevant):
+        self.cumulative_RR += rr(is_relevant)
+        self.n_users += 1
+
+    def get_metric_value(self):
+        return self.cumulative_RR/self.n_users
+
+    def merge_with_other(self, other_metric_object):
+        assert other_metric_object is MAP, "MRR: attempting to merge with a metric object of different type"
+
+        self.cumulative_RR += other_metric_object.cumulative_RR
+        self.n_users += other_metric_object.n_users
+
+
+
+
+
 class Gini_Diversity(Metrics_Object):
     """
     Gini diversity index, computed from the Gini Index but with inverted range, such that high values mean higher diversity
@@ -124,7 +154,8 @@ class Gini_Diversity(Metrics_Object):
         self.ignore_items = ignore_items.astype(np.int).copy()
 
     def add_recommendations(self, recommended_items_ids):
-        self.recommended_counter[recommended_items_ids] += 1
+        if len(recommended_items_ids) > 0:
+            self.recommended_counter[recommended_items_ids] += 1
 
     def get_metric_value(self):
 
@@ -173,7 +204,8 @@ class Diversity_Herfindahl(Metrics_Object):
         self.ignore_items = ignore_items.astype(np.int).copy()
 
     def add_recommendations(self, recommended_items_ids):
-        self.recommended_counter[recommended_items_ids] += 1
+        if len(recommended_items_ids) > 0:
+            self.recommended_counter[recommended_items_ids] += 1
 
     def get_metric_value(self):
 
@@ -184,7 +216,10 @@ class Diversity_Herfindahl(Metrics_Object):
 
         recommended_counter = recommended_counter[recommended_counter_mask]
 
-        herfindahl_index = 1 - np.sum((recommended_counter/recommended_counter.sum())**2)
+        if recommended_counter.sum() != 0:
+            herfindahl_index = 1 - np.sum((recommended_counter / recommended_counter.sum()) ** 2)
+        else:
+            herfindahl_index = np.nan
 
         return herfindahl_index
 
@@ -219,7 +254,8 @@ class Shannon_Entropy(Metrics_Object):
         self.ignore_items = ignore_items.astype(np.int).copy()
 
     def add_recommendations(self, recommended_items_ids):
-        self.recommended_counter[recommended_items_ids] += 1
+        if len(recommended_items_ids) > 0:
+            self.recommended_counter[recommended_items_ids] += 1
 
     def get_metric_value(self):
 
@@ -286,13 +322,16 @@ class Novelty(Metrics_Object):
 
     def add_recommendations(self, recommended_items_ids):
 
-        recommended_items_popularity = self.item_popularity[recommended_items_ids]
-
-        probability = recommended_items_popularity/self.n_interactions
-        probability = probability[probability!=0]
-
-        self.novelty += np.sum(-np.log2(probability)/self.n_items)
         self.n_evaluated_users += 1
+
+        if len(recommended_items_ids)>0:
+            recommended_items_popularity = self.item_popularity[recommended_items_ids]
+
+            probability = recommended_items_popularity/self.n_interactions
+            probability = probability[probability!=0]
+
+            self.novelty += np.sum(-np.log2(probability)/self.n_items)
+
 
     def get_metric_value(self):
 
@@ -436,8 +475,11 @@ class Diversity_MeanInterList(Metrics_Object):
 
         assert len(recommended_items_ids) <= self.cutoff, "Diversity_MeanInterList: recommended list is contains more elements than cutoff"
 
-        self.recommended_counter[recommended_items_ids] += 1
         self.n_evaluated_users += 1
+
+        if len(recommended_items_ids) > 0:
+            self.recommended_counter[recommended_items_ids] += 1
+
 
 
 
@@ -502,7 +544,8 @@ def roc_auc(is_relevant):
 
 
 def arhr(is_relevant):
-    # average reciprocal hit-rank (ARHR)
+    # average reciprocal hit-rank (ARHR) of all relevant items
+    # As opposed to MRR, ARHR takes into account all relevant items and not just the first
     # pag 17
     # http://glaros.dtc.umn.edu/gkhome/fetch/papers/itemrsTOIS04.pdf
     # https://emunix.emich.edu/~sverdlik/COSC562/ItemBasedTopTen.pdf
@@ -518,15 +561,21 @@ def arhr(is_relevant):
 
 def precision(is_relevant):
 
-    precision_score = np.sum(is_relevant, dtype=np.float32) / len(is_relevant)
+    if len(is_relevant) == 0:
+        precision_score = 0.0
+    else:
+        precision_score = np.sum(is_relevant, dtype=np.float32) / len(is_relevant)
 
     assert 0 <= precision_score <= 1, precision_score
     return precision_score
 
 
-def precision_min_test_len(is_relevant, n_test_items):
+def precision_recall_min_denominator(is_relevant, n_test_items):
 
-    precision_score = np.sum(is_relevant, dtype=np.float32) / min(n_test_items, len(is_relevant))
+    if len(is_relevant) == 0:
+        precision_score = 0.0
+    else:
+        precision_score = np.sum(is_relevant, dtype=np.float32) / min(n_test_items, len(is_relevant))
 
     assert 0 <= precision_score <= 1, precision_score
     return precision_score
@@ -540,28 +589,24 @@ def rmse(all_items_predicted_ratings, relevant_items, relevant_items_rating):
     relevant_items_error = (all_items_predicted_ratings[relevant_items]-relevant_items_rating)**2
 
     finite_prediction_mask = np.isfinite(relevant_items_error)
-    relevant_items_error = relevant_items_error[finite_prediction_mask]
 
-    squared_error = np.sum(relevant_items_error)
+    if finite_prediction_mask.sum() == 0:
+        rmse = np.nan
 
-    # # Second the RMSE against all non-test items assumed having true rating 0
-    # # In order to avoid the need of explicitly indexing all non-relevant items, use a difference
-    # squared_error += np.sum(all_items_predicted_ratings[np.isfinite(all_items_predicted_ratings)]**2) - \
-    #                  np.sum(all_items_predicted_ratings[relevant_items][np.isfinite(all_items_predicted_ratings[relevant_items])]**2)
+    else:
+        relevant_items_error = relevant_items_error[finite_prediction_mask]
 
-    mean_squared_error = squared_error/finite_prediction_mask.sum()
-    rmse = np.sqrt(mean_squared_error)
+        squared_error = np.sum(relevant_items_error)
+
+        # # Second the RMSE against all non-test items assumed having true rating 0
+        # # In order to avoid the need of explicitly indexing all non-relevant items, use a difference
+        # squared_error += np.sum(all_items_predicted_ratings[np.isfinite(all_items_predicted_ratings)]**2) - \
+        #                  np.sum(all_items_predicted_ratings[relevant_items][np.isfinite(all_items_predicted_ratings[relevant_items])]**2)
+
+        mean_squared_error = squared_error/finite_prediction_mask.sum()
+        rmse = np.sqrt(mean_squared_error)
 
     return rmse
-
-
-def recall_min_test_len(is_relevant, pos_items):
-
-    recall_score = np.sum(is_relevant, dtype=np.float32) / min(pos_items.shape[0], len(is_relevant))
-
-    assert 0 <= recall_score <= 1, recall_score
-    return recall_score
-
 
 
 def recall(is_relevant, pos_items):
@@ -585,8 +630,11 @@ def rr(is_relevant):
 
 def average_precision(is_relevant, pos_items):
 
-    p_at_k = is_relevant * np.cumsum(is_relevant, dtype=np.float32) / (1 + np.arange(is_relevant.shape[0]))
-    a_p = np.sum(p_at_k) / np.min([pos_items.shape[0], is_relevant.shape[0]])
+    if len(is_relevant) == 0:
+        a_p = 0.0
+    else:
+        p_at_k = is_relevant * np.cumsum(is_relevant, dtype=np.float32) / (1 + np.arange(is_relevant.shape[0]))
+        a_p = np.sum(p_at_k) / np.min([pos_items.shape[0], is_relevant.shape[0]])
 
     assert 0 <= a_p <= 1, a_p
     return a_p
