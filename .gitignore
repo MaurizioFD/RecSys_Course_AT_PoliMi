@@ -14,8 +14,8 @@ Data_manager_offline_datasets/**
 
 
 # Ignore cython compiled files
-!**/Cython/*.pyd
-!**/Cython/*.so
+**/Cython/*.pyd
+**/Cython/*.so
 **/Cython/*.html
 **/Cython/*.c
 **/Cython/build/*

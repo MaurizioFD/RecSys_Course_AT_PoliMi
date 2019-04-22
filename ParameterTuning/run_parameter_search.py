@@ -304,10 +304,13 @@ def runParameterSearch_Collaborative(recommender_class, URM_train, metric_to_opt
         if recommender_class in [MatrixFactorization_FunkSVD_Cython, MatrixFactorization_AsySVD_Cython]:
 
             hyperparamethers_range_dictionary = {}
-            hyperparamethers_range_dictionary["sgd_mode"] = Categorical(["adagrad", "adam"])
+            hyperparamethers_range_dictionary["sgd_mode"] = Categorical(["sgd"])#, "adagrad", "adam"])
             #hyperparamethers_range_dictionary["epochs"] = Integer(1, 150)
+            hyperparamethers_range_dictionary["use_bias"] = Categorical([True, False])
+            hyperparamethers_range_dictionary["batch_size"] = Categorical([1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024])
             hyperparamethers_range_dictionary["num_factors"] = Integer(1, 150)
-            hyperparamethers_range_dictionary["reg"] = Real(low = 1e-12, high = 1e-3, prior = 'log-uniform')
+            hyperparamethers_range_dictionary["item_reg"] = Real(low = 1e-12, high = 1e-3, prior = 'log-uniform')
+            hyperparamethers_range_dictionary["user_reg"] = Real(low = 1e-12, high = 1e-3, prior = 'log-uniform')
             hyperparamethers_range_dictionary["learning_rate"] = Real(low = 1e-5, high = 1e-2, prior = 'log-uniform')
 
             recommender_parameters = SearchInputRecommenderParameters(
@@ -328,10 +331,10 @@ def runParameterSearch_Collaborative(recommender_class, URM_train, metric_to_opt
         if recommender_class is MatrixFactorization_BPR_Cython:
 
             hyperparamethers_range_dictionary = {}
-            hyperparamethers_range_dictionary["sgd_mode"] = Categorical(["adagrad", "adam"])
+            hyperparamethers_range_dictionary["sgd_mode"] = Categorical(["sgd", "adagrad", "adam"])
             #hyperparamethers_range_dictionary["epochs"] = Integer(1, 150)
             hyperparamethers_range_dictionary["num_factors"] = Integer(1, 150)
-            hyperparamethers_range_dictionary["batch_size"] = Categorical([1])
+            hyperparamethers_range_dictionary["batch_size"] = Categorical([1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024])
             hyperparamethers_range_dictionary["positive_reg"] = Real(low = 1e-12, high = 1e-3, prior = 'log-uniform')
             hyperparamethers_range_dictionary["negative_reg"] = Real(low = 1e-12, high = 1e-3, prior = 'log-uniform')
             hyperparamethers_range_dictionary["learning_rate"] = Real(low = 1e-5, high = 1e-2, prior = 'log-uniform')

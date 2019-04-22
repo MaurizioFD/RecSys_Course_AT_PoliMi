@@ -36,46 +36,39 @@ class _MatrixFactorization_Cython(BaseMatrixFactorizationRecommender, Incrementa
 
     def fit(self, epochs=300, batch_size = 1000,
             num_factors=10, positive_threshold_BPR = None,
-            learning_rate = 0.001, sgd_mode='sgd',
-            user_reg = 0.0, positive_reg = 0.0, negative_reg = 0.0,
+            learning_rate = 0.001, use_bias = True,
+            sgd_mode='sgd',
+            init_mean = 0.0, init_std_dev = 0.1,
+            user_reg = 0.0, item_reg = 0.0, bias_reg = 0.0, positive_reg = 0.0, negative_reg = 0.0,
             verbose = False,
             **earlystopping_kwargs):
 
 
         self.num_factors = num_factors
+        self.use_bias = use_bias
         self.sgd_mode = sgd_mode
         self.verbose = verbose
-        self.batch_size = batch_size
         self.positive_threshold_BPR = positive_threshold_BPR
         self.learning_rate = learning_rate
 
         # Import compiled module
         from MatrixFactorization.Cython.MatrixFactorization_Cython_Epoch import MatrixFactorization_Cython_Epoch
 
-        if self.algorithm_name == "FUNK_SVD":
+
+        if self.algorithm_name in ["FUNK_SVD", "ASY_SVD"]:
 
             self.cythonEpoch = MatrixFactorization_Cython_Epoch(self.URM_train,
                                                                 algorithm_name = self.algorithm_name,
                                                                 n_factors = self.num_factors,
                                                                 learning_rate = learning_rate,
-                                                                batch_size = 1,
                                                                 sgd_mode = sgd_mode,
                                                                 user_reg = user_reg,
-                                                                positive_reg = positive_reg,
-                                                                negative_reg = 0.0,
-                                                                verbose = verbose)
-
-        elif self.algorithm_name == "ASY_SVD":
-
-            self.cythonEpoch = MatrixFactorization_Cython_Epoch(self.URM_train,
-                                                                algorithm_name = self.algorithm_name,
-                                                                n_factors = self.num_factors,
-                                                                learning_rate = learning_rate,
-                                                                batch_size = 1,
-                                                                sgd_mode = sgd_mode,
-                                                                user_reg = user_reg,
-                                                                positive_reg = positive_reg,
-                                                                negative_reg = 0.0,
+                                                                item_reg = item_reg,
+                                                                bias_reg = bias_reg,
+                                                                batch_size = batch_size,
+                                                                use_bias = use_bias,
+                                                                init_mean = init_mean,
+                                                                init_std_dev = init_std_dev,
                                                                 verbose = verbose)
 
         elif self.algorithm_name == "MF_BPR":
@@ -93,12 +86,14 @@ class _MatrixFactorization_Cython(BaseMatrixFactorizationRecommender, Incrementa
                                                                 algorithm_name = self.algorithm_name,
                                                                 n_factors = self.num_factors,
                                                                 learning_rate=learning_rate,
-                                                                batch_size=1,
                                                                 sgd_mode = sgd_mode,
-                                                                user_reg=user_reg,
-                                                                positive_reg=positive_reg,
-                                                                negative_reg=negative_reg,
-
+                                                                user_reg = user_reg,
+                                                                positive_reg = positive_reg,
+                                                                negative_reg = negative_reg,
+                                                                batch_size = batch_size,
+                                                                use_bias = use_bias,
+                                                                init_mean = init_mean,
+                                                                init_std_dev = init_std_dev,
                                                                 verbose = verbose)
         self._prepare_model_for_validation()
         self._update_best_model()
@@ -111,6 +106,11 @@ class _MatrixFactorization_Cython(BaseMatrixFactorizationRecommender, Incrementa
         self.USER_factors = self.USER_factors_best
         self.ITEM_factors = self.ITEM_factors_best
 
+        if self.use_bias:
+            self.USER_bias = self.USER_bias_best
+            self.ITEM_bias = self.ITEM_bias_best
+            self.GLOBAL_bias = self.GLOBAL_bias_best
+
         sys.stdout.flush()
 
 
@@ -119,10 +119,19 @@ class _MatrixFactorization_Cython(BaseMatrixFactorizationRecommender, Incrementa
         self.USER_factors = self.cythonEpoch.get_USER_factors()
         self.ITEM_factors = self.cythonEpoch.get_ITEM_factors()
 
+        if self.use_bias:
+            self.USER_bias = self.cythonEpoch.get_USER_bias()
+            self.ITEM_bias = self.cythonEpoch.get_ITEM_bias()
+            self.GLOBAL_bias = self.cythonEpoch.get_GLOBAL_bias()
 
     def _update_best_model(self):
         self.USER_factors_best = self.USER_factors.copy()
         self.ITEM_factors_best = self.ITEM_factors.copy()
+
+        if self.use_bias:
+            self.USER_bias_best = self.USER_bias.copy()
+            self.ITEM_bias_best = self.ITEM_bias.copy()
+            self.GLOBAL_bias_best = self.GLOBAL_bias
 
 
     def _run_epoch(self, num_epoch):
@@ -164,6 +173,9 @@ class MatrixFactorization_BPR_Cython(_MatrixFactorization_Cython):
         super(MatrixFactorization_BPR_Cython, self).__init__(*pos_args, algorithm_name="MF_BPR", **key_args)
 
     def fit(self, **key_args):
+
+        key_args["use_bias"] = False
+
         super(MatrixFactorization_BPR_Cython, self).fit(**key_args)
 
 
@@ -191,10 +203,6 @@ class MatrixFactorization_FunkSVD_Cython(_MatrixFactorization_Cython):
 
 
     def fit(self, **key_args):
-
-        if "reg" in key_args:
-            key_args["positive_reg"] = key_args["reg"]
-            del key_args["reg"]
 
         super(MatrixFactorization_FunkSVD_Cython, self).fit(**key_args)
 
@@ -224,10 +232,6 @@ class MatrixFactorization_AsySVD_Cython(_MatrixFactorization_Cython):
 
     def fit(self, **key_args):
 
-        if "reg" in key_args:
-            key_args["positive_reg"] = key_args["reg"]
-            del key_args["reg"]
-
         super(MatrixFactorization_AsySVD_Cython, self).fit(**key_args)
 
 
@@ -245,10 +249,21 @@ class MatrixFactorization_AsySVD_Cython(_MatrixFactorization_Cython):
 
         self.ITEM_factors = self.cythonEpoch.get_ITEM_factors()
 
+        if self.use_bias:
+            self.USER_bias = self.cythonEpoch.get_USER_bias()
+            self.ITEM_bias = self.cythonEpoch.get_ITEM_bias()
+            self.GLOBAL_bias = self.cythonEpoch.get_GLOBAL_bias()
+
+
     def _update_best_model(self):
         self.USER_factors_best = self.USER_factors.copy()
         self.ITEM_factors_best = self.ITEM_factors.copy()
         self.ITEM_factors_Y_best = self.ITEM_factors_Y.copy()
+
+        if self.use_bias:
+            self.USER_bias_best = self.USER_bias.copy()
+            self.ITEM_bias_best = self.ITEM_bias.copy()
+            self.GLOBAL_bias_best = self.GLOBAL_bias
 
 
     def _estimate_user_factors(self, ITEM_factors_Y):

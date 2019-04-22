@@ -104,7 +104,7 @@ class SLIM_BPR_Cython(BaseSimilarityMatrixRecommender, Incremental_Training_Earl
             if total_m is not None:
                 string = "SLIM_BPR_Cython: Automatic selection of fastest train mode. Available RAM is {:.2f} MB ({:.2f}%) of {:.2f} MB, required is {:.2f} MB. ".format(available_m, available_m/total_m*100 , total_m, required_m)
             else:
-                string = "SLIM_BPR_Cython: Automatic selection of fastest train mode. Unable to get current RAM stats, you may be using a non-Linux operative system. "
+                string = "SLIM_BPR_Cython: Automatic selection of fastest train mode. Unable to get current RAM status, you may be using a non-Linux operating system. "
 
             if total_m is None or required_m/available_m < self.free_mem_threshold:
                 print(string + "Using dense matrix.")
