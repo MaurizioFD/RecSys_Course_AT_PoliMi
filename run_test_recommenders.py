@@ -33,7 +33,7 @@ def run_recommender(recommender_class):
     try:
         dataset_object = Movielens1MReader()
 
-        dataSplitter = DataSplitter_leave_k_out(dataset_object, k_value=2)
+        dataSplitter = DataSplitter_leave_k_out(dataset_object, k_out_value=2)
 
         dataSplitter.load_data()
         URM_train, URM_validation, URM_test = dataSplitter.get_holdout_split()
@@ -51,27 +51,27 @@ def run_recommender(recommender_class):
 
         recommender_object.fit(**fit_params)
 
-        write_log_string(log_file, "Fit OK, ".format(recommender_class))
+        write_log_string(log_file, "Fit OK, ")
 
 
 
         evaluator = EvaluatorHoldout(URM_test, [5], exclude_seen=True)
         _, results_run_string = evaluator.evaluateRecommender(recommender_object)
 
-        write_log_string(log_file, "EvaluatorHoldout OK, ".format(recommender_class))
+        write_log_string(log_file, "EvaluatorHoldout OK, ")
 
 
 
         evaluator = EvaluatorNegativeItemSample(URM_test, URM_train, [5], exclude_seen=True)
         _, _ = evaluator.evaluateRecommender(recommender_object)
 
-        write_log_string(log_file, "EvaluatorNegativeItemSample OK, ".format(recommender_class))
+        write_log_string(log_file, "EvaluatorNegativeItemSample OK, ")
 
 
 
         recommender_object.saveModel(temp_save_file_folder, file_name="temp_model")
 
-        write_log_string(log_file, "saveModel OK, ".format(recommender_class))
+        write_log_string(log_file, "saveModel OK, ")
 
 
 
@@ -81,16 +81,14 @@ def run_recommender(recommender_class):
         evaluator = EvaluatorHoldout(URM_test, [5], exclude_seen=True)
         _, results_run_string_2 = evaluator.evaluateRecommender(recommender_object)
 
-        write_log_string(log_file, "loadModel OK, ".format(recommender_class))
+        write_log_string(log_file, "loadModel OK, ")
 
 
 
         shutil.rmtree(temp_save_file_folder, ignore_errors=True)
 
-        log_file.write(" PASS\n".format(recommender_class))
-        log_file.write(results_run_string + "\n\n")
-        log_file.flush()
-
+        write_log_string(log_file, " PASS\n")
+        write_log_string(log_file, results_run_string + "\n\n")
 
 
 
@@ -113,7 +111,7 @@ from KNN.ItemKNNCFRecommender import ItemKNNCFRecommender
 from KNN.UserKNNCFRecommender import UserKNNCFRecommender
 
 from MatrixFactorization.PureSVDRecommender import PureSVDRecommender
-from MatrixFactorization.WRMFRecommender import WRMFRecommender
+from MatrixFactorization.IALSRecommender import IALSRecommender
 from MatrixFactorization.Cython.MatrixFactorization_Cython import MatrixFactorization_BPR_Cython, MatrixFactorization_FunkSVD_Cython, MatrixFactorization_AsySVD_Cython
 
 from SLIM_BPR.Cython.SLIM_BPR_Cython import SLIM_BPR_Cython
@@ -140,7 +138,7 @@ if __name__ == '__main__':
         MatrixFactorization_FunkSVD_Cython,
         MatrixFactorization_AsySVD_Cython,
         PureSVDRecommender,
-        WRMFRecommender,
+        IALSRecommender,
     ]
 
     log_file = open(log_file_name, "w")

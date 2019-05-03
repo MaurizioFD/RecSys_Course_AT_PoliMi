@@ -9,7 +9,24 @@ Created on 01/01/2018
 
 import scipy.sparse as sps
 import numpy as np
-import pickle, os
+import os, traceback
+from Base.DataIO import DataIO
+from Data_manager.data_consistency_check import assert_URM_ICM_mapper_consistency
+
+
+def gini_index(array):
+    """Calculate the Gini coefficient of a numpy array."""
+    # based on bottom eq: http://www.statsdirect.com/help/content/image/stat0206_wmf.gif
+    # from: http://www.statsdirect.com/help/default.htm#nonparametric_methods/gini.htm
+    array = np.array(array, dtype=np.float)
+    array = array.flatten() #all values are treated equally, arrays must be 1d
+    if np.amin(array) < 0:
+        array -= np.amin(array) #values cannot be negative
+    array += 0.0000001 #values cannot be 0
+    array = np.sort(array) #values must be sorted
+    index = np.arange(1,array.shape[0]+1) #index per array element
+    n = array.shape[0]#number of array elements
+    return ((np.sum((2 * index - n  - 1) * array)) / (n * np.sum(array))) #Gini coefficient
 
 
 
@@ -60,6 +77,13 @@ class DataReader(object):
     # This flag specifies if the given dataset contains implicit preferences or explicit ratings
     IS_IMPLICIT = False
 
+    _DATA_READER_NAME = "DataReader"
+
+    # Dictionary for data matrices
+    _LOADED_URM_DICT = None
+    _LOADED_ICM_DICT = None
+    _LOADED_ICM_MAPPER_DICT = None
+    _LOADED_GLOBAL_MAPPER_DICT = None
 
     def __init__(self, reload_from_original_data = False, ICM_to_load_list = None):
 
@@ -67,35 +91,38 @@ class DataReader(object):
 
         self.reload_from_original_data = reload_from_original_data
         if self.reload_from_original_data:
-            print("DataReader: reload_from_original_data is True, previously loaded data will be ignored")
-
-        self.item_original_ID_to_index = {}
-        self.user_original_ID_to_index = {}
+            self._print("reload_from_original_data is True, previously loaded data will be ignored")
 
         if ICM_to_load_list is None:
             self.ICM_to_load_list = self.AVAILABLE_ICM.copy()
         else:
             assert all([ICM_to_load in self.AVAILABLE_ICM for ICM_to_load in ICM_to_load_list]), \
-                "DataReader: ICM_to_load_list contains ICM names which are not available for the current DataReader"
+                "{}: ICM_to_load_list contains ICM names which are not available for the current DataReader".format(self._DATA_READER_NAME)
             self.ICM_to_load_list = ICM_to_load_list.copy()
-
 
     def is_implicit(self):
         return self.IS_IMPLICIT
 
+    def _print(self, message):
+        print("{}: {}".format(self._DATA_READER_NAME, message))
+
+    def _assert_is_initialized(self):
+         assert self._LOADED_URM_DICT is not None, "DataReader {}: Unable to load data split. The split has not been generated yet, call the load_data function to do so.".format(self._get_dataset_name())
 
     def _get_dataset_name(self):
         return self._get_dataset_name_root()[:-1]
 
     def get_ICM_from_name(self, ICM_name):
-        return getattr(self, ICM_name).copy()
+        self._assert_is_initialized()
+        return self._LOADED_ICM_DICT[ICM_name].copy()
 
     def get_URM_from_name(self, URM_name):
-        return getattr(self, URM_name).copy()
-
+        self._assert_is_initialized()
+        return self._LOADED_URM_DICT[URM_name].copy()
 
     def get_ICM_feature_to_index_mapper_from_name(self, ICM_name):
-        return getattr(self, "tokenToFeatureMapper_" + ICM_name).copy()
+        self._assert_is_initialized()
+        return self._LOADED_ICM_MAPPER_DICT[ICM_name].copy()
 
     def get_loaded_ICM_names(self):
         return self.ICM_to_load_list.copy()
@@ -106,6 +133,23 @@ class DataReader(object):
     def get_loaded_URM_names(self):
         return self.AVAILABLE_URM.copy()
 
+    def get_item_original_ID_to_index_mapper(self):
+        return self._LOADED_GLOBAL_MAPPER_DICT["item_original_ID_to_index"].copy()
+
+    def get_user_original_ID_to_index_mapper(self):
+        return self._LOADED_GLOBAL_MAPPER_DICT["user_original_ID_to_index"].copy()
+
+    def get_loaded_Global_mappers(self):
+
+        global_mappers_dict = {}
+
+        for mapper_name, mapper_object in self._LOADED_GLOBAL_MAPPER_DICT.items():
+
+            global_mappers_dict[mapper_name] = mapper_object.copy()
+
+        return global_mappers_dict
+
+
     def get_loaded_ICM_dict(self):
 
         ICM_dict = {}
@@ -114,62 +158,26 @@ class DataReader(object):
 
             ICM_dict[ICM_name] = self.get_ICM_from_name(ICM_name)
 
-
         return ICM_dict
 
+    def get_loaded_URM_dict(self):
+
+        URM_dict = {}
+
+        for URM_name in self.get_loaded_URM_names():
+
+            URM_dict[URM_name] = self.get_URM_from_name(URM_name)
+
+
+        return URM_dict
 
     def get_URM_all(self):
-        return self.URM_all.copy()
+        return self.get_URM_from_name("URM_all")
 
 
-    def print_statistics(self):
+    def _load_from_original_file(self):
 
-        n_users, n_items = self.URM_all.shape
-
-        n_interactions = self.URM_all.nnz
-
-
-        URM_all = sps.csr_matrix(self.URM_all)
-        user_profile_length = np.ediff1d(URM_all.indptr)
-
-        max_interactions_per_user = user_profile_length.max()
-        avg_interactions_per_user = n_interactions/n_users
-        min_interactions_per_user = user_profile_length.min()
-
-        URM_all = sps.csc_matrix(self.URM_all)
-        item_profile_length = np.ediff1d(URM_all.indptr)
-
-        max_interactions_per_item = item_profile_length.max()
-        avg_interactions_per_item = n_interactions/n_items
-        min_interactions_per_item = item_profile_length.min()
-
-
-        print("DataReader: current dataset is: {}\n"
-              "\tNumber of items: {}\n"
-              "\tNumber of users: {}\n"
-              "\tNumber of interactions in URM_all: {}\n"
-              "\tInteraction density: {:.2E}\n"
-              "\tInteractions per user:\n"
-              "\t\t Min: {:.2E}\n"
-              "\t\t Avg: {:.2E}\n"    
-              "\t\t Max: {:.2E}\n"     
-              "\tInteractions per item:\n"    
-              "\t\t Min: {:.2E}\n"
-              "\t\t Avg: {:.2E}\n"    
-              "\t\t Max: {:.2E}\n".format(
-            self.__class__,
-            n_items,
-            n_users,
-            n_interactions,
-            n_interactions/(n_items*n_users),
-            min_interactions_per_user,
-            avg_interactions_per_user,
-            max_interactions_per_user,
-            min_interactions_per_item,
-            avg_interactions_per_item,
-            max_interactions_per_item
-        ))
-
+        raise NotImplementedError("{}: _load_from_original_file was not implemented for the required dataset. Impossible to load the data".format(self._DATA_READER_NAME))
 
 
     def _get_dataset_name_root(self):
@@ -178,7 +186,8 @@ class DataReader(object):
 
         :return: Dataset_name/
         """
-        raise NotImplementedError("DataReader: The following method was not implemented for the required dataset. Impossible to load the data")
+        raise NotImplementedError("{}:_get_dataset_name_root was not implemented for the required dataset. Impossible to load the data".format(self._DATA_READER_NAME))
+
 
 
 
@@ -202,6 +211,13 @@ class DataReader(object):
         :return:
         """
 
+        # Setting the empty dictionary here
+        # This avoids a static field which would be common to all DataReader object active
+        self._LOADED_URM_DICT = {}
+        self._LOADED_ICM_DICT = {}
+        self._LOADED_ICM_MAPPER_DICT = {}
+        self._LOADED_GLOBAL_MAPPER_DICT = {}
+
         # Use default e.g., "dataset_name/original/"
         if save_folder_path is None:
             save_folder_path = self.DATASET_SPLIT_ROOT_FOLDER + self._get_dataset_name_root() + self._get_dataset_name_data_subfolder()
@@ -214,191 +230,181 @@ class DataReader(object):
 
                 self._load_from_saved_sparse_matrix(save_folder_path)
 
-                print("DataReader: verifying data consistency...")
+                self._print("Verifying data consistency...")
                 self._verify_data_consistency()
-                print("DataReader: verifying data consistency... Passed!")
+                self._print("Verifying data consistency... Passed!")
 
                 self.print_statistics()
                 return
 
-            except:
+            except FileNotFoundError:
 
-                print("DataReader: Preloaded data not found, reading from original files...")
-                pass
+                self._print("Preloaded data not found, reading from original files...")
+
+            except Exception:
+
+                self._print("Reading split from {} caused the following exception...".format(save_folder_path))
+                traceback.print_exc()
+                raise Exception("{}: Exception while reading split".format(self._get_dataset_name()))
 
 
         self._load_from_original_file()
 
-        print("DataReader: verifying data consistency...")
+        self._print("Verifying data consistency...")
         self._verify_data_consistency()
-        print("DataReader: verifying data consistency... Passed!")
+        self._print("Verifying data consistency... Passed!")
 
         if save_folder_path not in [False]:
 
             # If directory does not exist, create
             if not os.path.exists(save_folder_path):
-                print("DataReader: Creating folder '{}'".format(save_folder_path))
+                self._print("Creating folder '{}'".format(save_folder_path))
                 os.makedirs(save_folder_path)
 
             else:
-                print("DataReader: Found already existing folder '{}'".format(save_folder_path))
+                self._print("Found already existing folder '{}'".format(save_folder_path))
 
-            for URM_name in self.get_loaded_URM_names():
-                print("DataReader: Saving {}...".format(URM_name))
-                sps.save_npz(save_folder_path + "{}.npz".format(URM_name), self.get_URM_from_name(URM_name))
+            self._save_dataset(save_folder_path)
 
-            for ICM_name in self.get_loaded_ICM_names():
-                print("DataReader: Saving {}...".format(ICM_name))
-                sps.save_npz(save_folder_path + "{}.npz".format(ICM_name), self.get_ICM_from_name(ICM_name))
-
-
-        self._save_mappers(save_folder_path)
-
-        print("DataReader: Saving complete!")
+            self._print("Saving complete!")
 
         self.print_statistics()
 
 
-
-    def _verify_data_consistency(self):
-
-        URM_all = self.get_URM_all()
-        n_users, n_items_URM = URM_all.shape
-        n_interactions = URM_all.nnz
-
-        assert n_users != 0, "DataReader consistency check: Number of users in URM is 0"
-        assert n_items_URM != 0, "DataReader consistency check: Number of items in URM is 0"
-        assert n_interactions != 0, "DataReader consistency check: Number of interactions in URM is 0"
-
-        # Check if item index-id and user index-id are consistent
-        assert n_users >= len(self.user_original_ID_to_index), "DataReader consistency check: user it-to-index mapper contains more keys than users"
-        assert n_items_URM >= len(self.item_original_ID_to_index), "DataReader consistency check: item it-to-index mapper contains more keys than items"
-
-        assert n_users >= max(self.user_original_ID_to_index.values()), "DataReader consistency check: user it-to-index mapper contains indices greater than number of users"
-        assert n_items_URM >= max(self.item_original_ID_to_index.values()), "DataReader consistency check: item it-to-index mapper contains indices greater than number of item"
+    #########################################################################################################
+    ##########                                                                                     ##########
+    ##########                                LOAD AND SAVE                                        ##########
+    ##########                                                                                     ##########
+    #########################################################################################################
 
 
-        # Check if every non-empty user and item has a mapper value
-        URM_all = sps.csc_matrix(URM_all)
-        nonzero_items_mask = np.ediff1d(URM_all.indptr)>0
-        nonzero_items = np.arange(0, n_items_URM, dtype=np.int)[nonzero_items_mask]
-        assert np.isin(nonzero_items, np.array(list(self.item_original_ID_to_index.values()))).all(), "DataReader consistency check: there exist items with interactions that do not have a mapper entry"
+    def _save_dataset(self, save_folder_path):
 
+        dataIO = DataIO(folder_path = save_folder_path)
 
-        URM_all = sps.csr_matrix(URM_all)
-        nonzero_users_mask = np.ediff1d(URM_all.indptr)>0
-        nonzero_users = np.arange(0, n_users, dtype=np.int)[nonzero_users_mask]
-        assert np.isin(nonzero_users, np.array(list(self.user_original_ID_to_index.values()))).all(), "DataReader consistency check: there exist users with interactions that do not have a mapper entry"
+        dataIO.save_data(data_dict_to_save = self._LOADED_GLOBAL_MAPPER_DICT,
+                         file_name = "dataset_global_mappers")
 
+        dataIO.save_data(data_dict_to_save = self._LOADED_URM_DICT,
+                         file_name = "dataset_URM")
 
-        for ICM_name in self.get_loaded_ICM_names():
+        if len(self.get_loaded_ICM_names()) > 0:
+            dataIO.save_data(data_dict_to_save = self._LOADED_ICM_DICT,
+                             file_name = "dataset_ICM")
 
-            ICM_object = self.get_ICM_from_name(ICM_name)
-            feature_original_id_to_index = self.get_ICM_feature_to_index_mapper_from_name(ICM_name)
-
-            n_items_ICM, n_features = ICM_object.shape
-            n_feature_occurrences = ICM_object.nnz
-
-            assert n_items_ICM == n_items_URM, "DataReader consistency check: Number of users in ICM {} is {} while in URM is {}".format(ICM_name, n_items_ICM, n_items_URM)
-            assert n_features != 0, "DataReader consistency check: Number of features in ICM {} is 0".format(ICM_name)
-            assert n_feature_occurrences != 0, "DataReader consistency check: Number of interactions in ICM {} is 0".format(ICM_name)
-
-
-            assert n_features >= len(feature_original_id_to_index), "DataReader consistency check: feature id-to-index mapper contains more keys than features in ICM {}".format(ICM_name)
-            assert n_features >= max(feature_original_id_to_index.values()), "DataReader consistency check: feature id-to-index mapper contains indices greater than number of features in ICM {}".format(ICM_name)
-
-            # Check if every non-empty item and feature has a mapper value
-            ICM_object = sps.csr_matrix(ICM_object)
-            nonzero_items_mask = np.ediff1d(ICM_object.indptr)>0
-            nonzero_items = np.arange(0, n_items_URM, dtype=np.int)[nonzero_items_mask]
-            assert np.isin(nonzero_items, np.array(list(self.item_original_ID_to_index.values()))).all(), "DataReader consistency check: there exist items with features that do not have a mapper entry in ICM {}".format(ICM_name)
-
-
-            ICM_object = sps.csc_matrix(ICM_object)
-            nonzero_features_mask = np.ediff1d(ICM_object.indptr)>0
-            nonzero_features = np.arange(0, n_features, dtype=np.int)[nonzero_features_mask]
-            assert np.isin(nonzero_features, np.array(list(feature_original_id_to_index.values()))).all(), "DataReader consistency check: there exist users with interactions that do not have a mapper entry in ICM {}".format(ICM_name)
-
-
-
-
-    def _load_from_original_file(self):
-
-        raise NotImplementedError("DataReader: The following method was not implemented for the required dataset. Impossible to load the data")
-
-
+            dataIO.save_data(data_dict_to_save = self._LOADED_ICM_MAPPER_DICT,
+                             file_name = "dataset_ICM_mappers")
 
 
 
 
     def _load_from_saved_sparse_matrix(self, save_folder_path):
-
-        file_names_to_load = self.get_loaded_ICM_names()
-
-        file_names_to_load.extend(self.get_loaded_URM_names())
-
-        for file_name in file_names_to_load:
-
-            print("DataReader: Loading {}...".format(save_folder_path + file_name))
-            self.__setattr__(file_name, sps.load_npz("{}.npz".format(save_folder_path + file_name)))
-
-        self._load_mappers(save_folder_path)
-
-        print("DataReader: Loading complete!")
-
-
-
-
-
-    def _save_mappers(self, save_folder_path):
         """
-        Saves the mappers for the given dataset. Mappers associate the original ID of user, item, feature, to the
-        index in the sparse matrix
-        :param dataset_specific_mappers_list:
+        Loads all URM and ICM
         :return:
         """
 
-        mappers_list = list(self.GLOBAL_MAPPER)
-        mappers_list.extend(self.DATASET_SPECIFIC_MAPPER)
+        dataIO = DataIO(folder_path = save_folder_path)
 
-        for ICM_name in self.get_loaded_ICM_names():
-            mappers_list.append("tokenToFeatureMapper_{}".format(ICM_name))
+        self._LOADED_GLOBAL_MAPPER_DICT = dataIO.load_data(file_name ="dataset_global_mappers")
 
+        self._LOADED_URM_DICT = dataIO.load_data(file_name ="dataset_URM")
 
-        for mapper_name in mappers_list:
-            mapper_data = self.__getattribute__(mapper_name)
-            pickle.dump(mapper_data, open(save_folder_path + mapper_name, "wb"), protocol=pickle.HIGHEST_PROTOCOL)
+        if len(self.get_loaded_ICM_names()) > 0:
+            self._LOADED_ICM_DICT = dataIO.load_data(file_name ="dataset_ICM")
 
-
+            self._LOADED_ICM_MAPPER_DICT = dataIO.load_data(file_name ="dataset_ICM_mappers")
 
 
-    def _load_mappers(self, save_folder_path):
-        """
-        Loads all saved mappers for the given dataset. Mappers are the union of GLOBAL mappers and dataset specific ones
-        :return:
-        """
-
-        mappers_list = list(self.GLOBAL_MAPPER)
-        mappers_list.extend(self.DATASET_SPECIFIC_MAPPER)
-
-        for ICM_name in self.get_loaded_ICM_names():
-            mappers_list.append("tokenToFeatureMapper_{}".format(ICM_name))
-
-        for mapper_name in mappers_list:
-            self.__setattr__(mapper_name, pickle.load(open(save_folder_path + mapper_name, "rb")))
+    #########################################################################################################
+    ##########                                                                                     ##########
+    ##########                                DATASET STATISTICS                                   ##########
+    ##########                                                                                     ##########
+    #########################################################################################################
 
 
+    def print_statistics(self):
+
+        self._assert_is_initialized()
+
+        URM_all = self.get_URM_all()
+
+        n_users, n_items = URM_all.shape
+
+        n_interactions = URM_all.nnz
 
 
-    def _merge_ICM(self, ICM1, ICM2, mapper_ICM1, mapper_ICM2):
+        URM_all = sps.csr_matrix(URM_all)
+        user_profile_length = np.ediff1d(URM_all.indptr)
 
-        ICM_all = sps.hstack([ICM1, ICM2], format='csr')
+        max_interactions_per_user = user_profile_length.max()
+        avg_interactions_per_user = n_interactions/n_users
+        min_interactions_per_user = user_profile_length.min()
 
-        mapper_ICM_all = mapper_ICM1.copy()
+        URM_all = sps.csc_matrix(URM_all)
+        item_profile_length = np.ediff1d(URM_all.indptr)
 
-        for key in mapper_ICM2.keys():
-            mapper_ICM_all[key] = mapper_ICM2[key] + len(mapper_ICM1)
+        max_interactions_per_item = item_profile_length.max()
+        avg_interactions_per_item = n_interactions/n_items
+        min_interactions_per_item = item_profile_length.min()
 
-        return  ICM_all, mapper_ICM_all
+
+        print("DataReader: current dataset is: {}\n"
+              "\tNumber of items: {}\n"
+              "\tNumber of users: {}\n"
+              "\tNumber of interactions in URM_all: {}\n"
+              "\tInteraction density: {:.2E}\n"
+              "\tInteractions per user:\n"
+              "\t\t Min: {:.2E}\n"
+              "\t\t Avg: {:.2E}\n"    
+              "\t\t Max: {:.2E}\n"     
+              "\tInteractions per item:\n"    
+              "\t\t Min: {:.2E}\n"
+              "\t\t Avg: {:.2E}\n"    
+              "\t\t Max: {:.2E}\n"
+              "\tGini Index: {:.2f}\n".format(
+            self.__class__,
+            n_items,
+            n_users,
+            n_interactions,
+            n_interactions/(n_items*n_users),
+            min_interactions_per_user,
+            avg_interactions_per_user,
+            max_interactions_per_user,
+            min_interactions_per_item,
+            avg_interactions_per_item,
+            max_interactions_per_item,
+            gini_index(user_profile_length),
+        ))
 
 
+
+    #########################################################################################################
+    ##########                                                                                     ##########
+    ##########                                DATA CONSISTENCY                                     ##########
+    ##########                                                                                     ##########
+    #########################################################################################################
+
+
+    def _verify_data_consistency(self):
+
+        self._assert_is_initialized()
+
+        print_preamble = "{} consistency check: ".format(self._get_dataset_name())
+
+        URM_all = self.get_URM_all()
+        n_interactions = URM_all.nnz
+
+        assert n_interactions != 0, print_preamble + "Number of interactions in URM is 0"
+
+        assert all(loaded_ICM_name in self._LOADED_ICM_DICT for loaded_ICM_name in self.get_loaded_ICM_names()), \
+            print_preamble + "The DataReader has not loaded all the ICMs it was supposed to load."
+
+        assert all(loaded_ICM_name in self.get_loaded_ICM_names() for loaded_ICM_name in self._LOADED_ICM_DICT), \
+            print_preamble + "The DataReader has loaded an ICM which was not supposed to load"
+
+        assert_URM_ICM_mapper_consistency(URM_DICT = self.get_loaded_URM_dict(),
+                                          GLOBAL_MAPPER_DICT = self.get_loaded_Global_mappers(),
+                                          ICM_DICT = self.get_loaded_ICM_dict(),
+                                          ICM_MAPPER_DICT = self._LOADED_ICM_MAPPER_DICT,
+                                          DATA_SPLITTER_NAME = self._get_dataset_name())

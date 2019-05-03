@@ -8,8 +8,7 @@
 import numpy as np
 from Base.BaseRecommender import BaseRecommender
 from Base.Recommender_utils import check_matrix
-
-import pickle
+from Base.DataIO import DataIO
 
 
 class TopPop(BaseRecommender):
@@ -51,11 +50,10 @@ class TopPop(BaseRecommender):
 
         print("{}: Saving model in file '{}'".format(self.RECOMMENDER_NAME, folder_path + file_name))
 
-        dictionary_to_save = {"item_pop": self.item_pop}
+        data_dict_to_save = {"item_pop": self.item_pop}
 
-        pickle.dump(dictionary_to_save,
-                    open(folder_path + file_name, "wb"),
-                    protocol=pickle.HIGHEST_PROTOCOL)
+        dataIO = DataIO(folder_path=folder_path)
+        dataIO.save_data(file_name=file_name, data_dict_to_save = data_dict_to_save)
 
         print("{}: Saving complete".format(self.RECOMMENDER_NAME))
 
@@ -142,11 +140,10 @@ class GlobalEffects(BaseRecommender):
 
         print("{}: Saving model in file '{}'".format(self.RECOMMENDER_NAME, folder_path + file_name))
 
-        dictionary_to_save = {"item_bias": self.item_bias}
+        data_dict_to_save = {"item_bias": self.item_bias}
 
-        pickle.dump(dictionary_to_save,
-                    open(folder_path + file_name, "wb"),
-                    protocol=pickle.HIGHEST_PROTOCOL)
+        dataIO = DataIO(folder_path=folder_path)
+        dataIO.save_data(file_name=file_name, data_dict_to_save = data_dict_to_save)
 
         print("{}: Saving complete".format(self.RECOMMENDER_NAME))
 
@@ -188,12 +185,10 @@ class Random(BaseRecommender):
 
         print("{}: Saving model in file '{}'".format(self.RECOMMENDER_NAME, folder_path + file_name))
 
-        dictionary_to_save = {}
+        data_dict_to_save = {}
 
-        pickle.dump(dictionary_to_save,
-                    open(folder_path + file_name, "wb"),
-                    protocol=pickle.HIGHEST_PROTOCOL)
-
+        dataIO = DataIO(folder_path=folder_path)
+        dataIO.save_data(file_name=file_name, data_dict_to_save = data_dict_to_save)
 
         print("{}: Saving complete".format(self.RECOMMENDER_NAME))
 

@@ -23,7 +23,7 @@ import time
 import sys
 
 from libc.math cimport exp, sqrt
-from libc.stdlib cimport rand, RAND_MAX
+from libc.stdlib cimport rand, srand, RAND_MAX
 
 
 cdef struct BPR_sample:
@@ -51,7 +51,7 @@ cdef class MatrixFactorization_Cython_Epoch:
     cdef algorithm_name
 
     cdef float learning_rate, user_reg, item_reg, positive_reg, negative_reg, bias_reg
-    cdef double init_mean, init_std_dev
+    cdef double init_mean, init_std_dev, MSE_negative_interactions_quota, MSE_sample_negative_interactions_flag
 
     cdef int batch_size
 
@@ -87,9 +87,10 @@ cdef class MatrixFactorization_Cython_Epoch:
 
     def __init__(self, URM_train, n_factors = 1, algorithm_name = None,
                  batch_size = 1,
+                 negative_interactions_quota = 0.5,
                  learning_rate = 1e-3, use_bias = False,
                  user_reg = 0.0, item_reg = 0.0, bias_reg = 0.0, positive_reg = 0.0, negative_reg = 0.0,
-                 verbose = False,
+                 verbose = False, random_seed = None,
                  init_mean = 0.0, init_std_dev = 0.1,
                  sgd_mode='sgd', gamma=0.995, beta_1=0.9, beta_2=0.999):
 
@@ -102,8 +103,10 @@ cdef class MatrixFactorization_Cython_Epoch:
         if algorithm_name not in self.ALGORITHM_NAME_VALUES:
            raise ValueError("Value for 'algorithm_name' not recognized. Acceptable values are {}, provided was '{}'".format(self.ALGORITHM_NAME_VALUES, algorithm_name))
 
-
+        # Create copy of URM_train in csr format
+        # make sure indices are sorted
         URM_train = check_matrix(URM_train, 'csr')
+        URM_train = URM_train.sorted_indices()
 
         self.profile_length = np.ediff1d(URM_train.indptr)
         self.n_users, self.n_items = URM_train.shape
@@ -122,11 +125,13 @@ cdef class MatrixFactorization_Cython_Epoch:
         self.batch_size = batch_size
         self.init_mean = init_mean
         self.init_std_dev = init_std_dev
+        self.MSE_negative_interactions_quota = negative_interactions_quota
+        self.MSE_sample_negative_interactions_flag = self.MSE_negative_interactions_quota != 0.0
 
 
-        self.mini_batch_sampled_items = np.zeros(self.batch_size, dtype=np.int32)
-        self.mini_batch_sampled_items_negative = np.zeros(self.batch_size, dtype=np.int32)
-        self.mini_batch_sampled_users = np.zeros(self.batch_size, dtype=np.int32)
+        self.mini_batch_sampled_items = np.zeros(self.batch_size, dtype=np.int)
+        self.mini_batch_sampled_items_negative = np.zeros(self.batch_size, dtype=np.int)
+        self.mini_batch_sampled_users = np.zeros(self.batch_size, dtype=np.int)
 
         self.URM_train_indices = URM_train.indices
         self.URM_train_data = np.array(URM_train.data, dtype=np.float64)
@@ -136,6 +141,9 @@ cdef class MatrixFactorization_Cython_Epoch:
         self._init_latent_factors()
 
         self._init_adaptive_gradient_cache(sgd_mode, gamma, beta_1, beta_2)
+
+        if random_seed is not None:
+            srand(<unsigned> random_seed)
 
 
 
@@ -797,23 +805,57 @@ cdef class MatrixFactorization_Cython_Epoch:
         cdef MSE_sample sample = MSE_sample(-1,-1,-1.0)
         cdef long index, start_pos_seen_items, end_pos_seen_items
 
-        cdef int numSeenItems = 0
+        cdef int neg_item_selected, sample_positive, n_seen_items = 0
 
         # Skip users with no interactions or with no negative items
-        while numSeenItems == 0 or numSeenItems == self.n_items:
+        while n_seen_items == 0 or n_seen_items == self.n_items:
 
             sample.user = rand() % self.n_users
 
             start_pos_seen_items = self.URM_train_indptr[sample.user]
             end_pos_seen_items = self.URM_train_indptr[sample.user+1]
 
-            numSeenItems = end_pos_seen_items - start_pos_seen_items
+            n_seen_items = end_pos_seen_items - start_pos_seen_items
 
 
-        index = rand() % numSeenItems
+        # Decide to sample positive or negative
+        if self.MSE_sample_negative_interactions_flag:
+            sample_positive = rand() <= self.MSE_negative_interactions_quota * RAND_MAX
+        else:
+            sample_positive = True
 
-        sample.item = self.URM_train_indices[start_pos_seen_items + index]
-        sample.rating = self.URM_train_data[start_pos_seen_items + index]
+
+        if sample_positive:
+
+            # Sample positive
+            index = rand() % n_seen_items
+
+            sample.item = self.URM_train_indices[start_pos_seen_items + index]
+            sample.rating = self.URM_train_data[start_pos_seen_items + index]
+
+        else:
+
+            # Sample negative
+            neg_item_selected = False
+
+            # It's faster to just try again then to build a mapping of the non-seen items
+            # for every user
+            while not neg_item_selected:
+
+                sample.item = rand() % self.n_items
+                sample.rating = 0.0
+
+                index = 0
+                # Indices data is sorted, so I don't need to go to the end of the current row
+                while index < n_seen_items and self.URM_train_indices[start_pos_seen_items + index] < sample.item:
+                    index+=1
+
+                # If the positive item in position 'index' is == sample.item, negative not selected
+                # If the positive item in position 'index' is > sample.item or index == n_seen_items, negative selected
+                if index == n_seen_items or self.URM_train_indices[start_pos_seen_items + index] > sample.item:
+                    neg_item_selected = True
+
+
 
         return sample
 
@@ -825,41 +867,44 @@ cdef class MatrixFactorization_Cython_Epoch:
         cdef BPR_sample sample = BPR_sample(-1,-1,-1)
         cdef long index, start_pos_seen_items, end_pos_seen_items
 
-        cdef int negItemSelected, numSeenItems = 0
+        cdef int neg_item_selected, n_seen_items = 0
 
 
         # Skip users with no interactions or with no negative items
         # Skip users with no interactions or with no negative items
-        while numSeenItems == 0 or numSeenItems == self.n_items:
+        while n_seen_items == 0 or n_seen_items == self.n_items:
 
             sample.user = rand() % self.n_users
 
             start_pos_seen_items = self.URM_train_indptr[sample.user]
             end_pos_seen_items = self.URM_train_indptr[sample.user+1]
 
-            numSeenItems = end_pos_seen_items - start_pos_seen_items
+            n_seen_items = end_pos_seen_items - start_pos_seen_items
             
 
-        index = rand() % numSeenItems
+        index = rand() % n_seen_items
 
         sample.pos_item = self.URM_train_indices[start_pos_seen_items + index]
 
 
 
-        negItemSelected = False
+        neg_item_selected = False
 
         # It's faster to just try again then to build a mapping of the non-seen items
         # for every user
-        while (not negItemSelected):
+        while not neg_item_selected:
 
             sample.neg_item = rand() % self.n_items
 
             index = 0
-            while index < numSeenItems and self.URM_train_indices[start_pos_seen_items + index]!=sample.neg_item:
+            # Indices data is sorted, so I don't need to go to the end of the current row
+            while index < n_seen_items and self.URM_train_indices[start_pos_seen_items + index] < sample.neg_item:
                 index+=1
 
-            if index == numSeenItems:
-                negItemSelected = True
+            # If the positive item in position 'index' is == sample.neg_item, negative not selected
+            # If the positive item in position 'index' is > sample.neg_item or index == n_seen_items, negative selected
+            if index == n_seen_items or self.URM_train_indices[start_pos_seen_items + index] > sample.neg_item:
+                neg_item_selected = True
 
 
         return sample

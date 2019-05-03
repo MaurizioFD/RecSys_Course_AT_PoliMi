@@ -12,17 +12,16 @@ from Base.Recommender_utils import check_matrix
 import numpy as np
 
 
-class WRMFRecommender(BaseMatrixFactorizationRecommender, Incremental_Training_Early_Stopping):
+class IALSRecommender(BaseMatrixFactorizationRecommender, Incremental_Training_Early_Stopping):
     """
-    WRMFRecommender
 
-    Binary/Implicit Alternating Least Squares (IALS) or Weighted Regularize Matrix Factorization by alternating least squares.
+    Binary/Implicit Alternating Least Squares (IALS)
     See:
     Y. Hu, Y. Koren and C. Volinsky, Collaborative filtering for implicit feedback datasets, ICDM 2008.
     http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.167.5120&rep=rep1&type=pdf
 
     R. Pan et al., One-class collaborative filtering, ICDM 2008.
-    https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=4781145
+    http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.306.4684&rep=rep1&type=pdf
 
     Factorization model for binary feedback.
     First, splits the feedback matrix R as the element-wise a Preference matrix P and a Confidence matrix C.
@@ -33,7 +32,7 @@ class WRMFRecommender(BaseMatrixFactorizationRecommender, Incremental_Training_E
     \operatornamewithlimits{argmin}\limits_{x*,y*}\frac{1}{2}\sum_{i,j}{c_{ij}(p_{ij}-x_i^T y_j) + \lambda(\sum_{i}{||x_i||^2} + \sum_{j}{||y_j||^2})}
     """
 
-    RECOMMENDER_NAME = "WRMFRecommender"
+    RECOMMENDER_NAME = "IALSRecommender"
 
     AVAILABLE_CONFIDENCE_SCALING = ["linear", "log"]
 
@@ -65,7 +64,6 @@ class WRMFRecommender(BaseMatrixFactorizationRecommender, Incremental_Training_E
 
 
         self.num_factors = num_factors
-        self.confidence_scaling = confidence_scaling
         self.alpha = alpha
         self.epsilon = epsilon
         self.reg = reg
@@ -74,13 +72,7 @@ class WRMFRecommender(BaseMatrixFactorizationRecommender, Incremental_Training_E
         self.ITEM_factors = self._init_factors(self.n_items)
 
 
-        if self.confidence_scaling == 'linear':
-            self.C = self._linear_scaling_confidence()
-        else:
-            self.C = self._log_scaling_confidence()
-
-        self.C_csc= check_matrix(self.C.copy(), format="csc", dtype = np.float32)
-
+        self._build_confidence_matrix(confidence_scaling)
 
 
         warm_user_mask = np.ediff1d(self.URM_train.indptr) > 0
@@ -100,6 +92,18 @@ class WRMFRecommender(BaseMatrixFactorizationRecommender, Incremental_Training_E
 
         self.USER_factors = self.USER_factors_best
         self.ITEM_factors = self.ITEM_factors_best
+
+
+
+
+    def _build_confidence_matrix(self, confidence_scaling):
+
+        if confidence_scaling == 'linear':
+            self.C = self._linear_scaling_confidence()
+        else:
+            self.C = self._log_scaling_confidence()
+
+        self.C_csc= check_matrix(self.C.copy(), format="csc", dtype = np.float32)
 
 
 
@@ -204,5 +208,6 @@ class WRMFRecommender(BaseMatrixFactorizationRecommender, Incremental_Training_E
 
         else:
             return np.empty((num_factors, self.num_factors))
+
 
 

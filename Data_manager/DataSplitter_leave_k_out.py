@@ -8,11 +8,12 @@ Created on 12/01/18
 
 import scipy.sparse as sps
 import numpy as np
-import pickle
+from Base.DataIO import DataIO
 
 from Data_manager.DataSplitter import DataSplitter
-
-from Data_manager.IncrementalSparseMatrix import IncrementalSparseMatrix
+from Data_manager.DataReader_utils import compute_density, reconcile_mapper_with_removed_tokens
+from Data_manager.Split_functions.split_train_validation_leave_k_out import split_train_leave_k_out_user_wise
+from Data_manager.data_consistency_check import assert_disjoint_matrices, assert_URM_ICM_mapper_consistency
 
 
 class DataSplitter_leave_k_out(DataSplitter):
@@ -40,28 +41,32 @@ class DataSplitter_leave_k_out(DataSplitter):
     
     """
 
+    DATA_SPLITTER_NAME = "DataSplitter_leave_k_out"
 
-    def __init__(self, dataReader_object, k_value = 1, forbid_new_split = False, force_new_split = False, validation_set = True, leave_last_out = False):
+    SPLIT_URM_DICT = None
+    SPLIT_ICM_DICT = None
+    SPLIT_ICM_MAPPER_DICT = None
+    SPLIT_GLOBAL_MAPPER_DICT = None
+
+
+    def __init__(self, dataReader_object, k_out_value = 1, forbid_new_split = False, force_new_split = False, use_validation_set = True, leave_random_out = True):
         """
 
         :param dataReader_object:
         :param n_folds:
         :param force_new_split:
         :param forbid_new_split:
-        :param save_folder_path:    path in which to save the loaded dataset
-                                    None    use default "dataset_name/split_name/"
-                                    False   do not save
         """
 
 
-        assert k_value>=1, "DataSplitter_leave_k_out: k_value must be  greater or equal than 1"
+        assert k_out_value >= 1, "{}: k_out_value must be  greater or equal than 1".format(self.DATA_SPLITTER_NAME)
 
-        self.k_value = k_value
-        self.validation_set = validation_set
+        self.k_out_value = k_out_value
+        self.use_validation_set = use_validation_set
         self.allow_cold_users = False
-        self.leave_last_out = leave_last_out
+        self.leave_random_out = leave_random_out
 
-        print("DataSplitter_leave_k_out: Cold users not allowed")
+        self._print("Cold users not allowed")
 
         super(DataSplitter_leave_k_out, self).__init__(dataReader_object, forbid_new_split=forbid_new_split, force_new_split=force_new_split)
 
@@ -73,66 +78,103 @@ class DataSplitter_leave_k_out(DataSplitter):
         :return: warm_{n_folds}_fold/
         """
 
-        if self.leave_last_out:
-            order_suffix = "last"
-        else:
+        if self.leave_random_out:
             order_suffix = "random"
+        else:
+            order_suffix = "last"
 
 
-        return "leave_{}_out_{}/".format(self.k_value, order_suffix)
+        return "leave_{}_out_{}/".format(self.k_out_value, order_suffix)
 
 
     def get_statistics_URM(self):
 
-        # This avoids the fixed bit representation of numpy preventing
-        # an overflow when computing the product
-        n_items = int(self.n_items)
-        n_users = int(self.n_users)
 
-        print("DataSplitter_k_fold for DataReader: {}\n"
-              "\t Num items: {}\n"
-              "\t Num users: {}\n".format(self.dataReader_object._get_dataset_name(), n_items, n_users),
-              "\t Train interactions: {}, density: {:.2E}\n".format(self.URM_train.nnz, self.URM_train.nnz/(int(n_items)*int(n_users))),
-              "\t Test interactions: {}, density: {:.2E}".format(self.URM_test.nnz, self.URM_test.nnz/(int(n_items)*int(n_users))))
+        self._assert_is_initialized()
 
-        if self.validation_set:
-            print("\t Validation interactions: {}, density: {:.2E}\n".format(self.URM_validation.nnz, self.URM_validation.nnz/(int(n_items)*int(n_users))))
+        n_users, n_items = self.SPLIT_URM_DICT["URM_train"].shape
+
+        statistics_string = "DataReader: {}\n" \
+                            "\tNum items: {}\n" \
+                            "\tNum users: {}\n" \
+                            "\tTrain \t\tinteractions {}, \tdensity {:.2E}\n".format(
+                            self.dataReader_object._get_dataset_name(),
+                            n_items,
+                            n_users,
+                            self.SPLIT_URM_DICT["URM_train"].nnz, compute_density(self.SPLIT_URM_DICT["URM_train"]))
+
+        if self.use_validation_set:
+            statistics_string += "\tValidation \tinteractions {}, \tdensity {:.2E}\n".format(
+                                    self.SPLIT_URM_DICT["URM_validation"].nnz, compute_density(self.SPLIT_URM_DICT["URM_validation"]))
+
+
+        statistics_string += "\tTest \t\tinteractions {}, \tdensity {:.2E}\n".format(
+                                self.SPLIT_URM_DICT["URM_test"].nnz, compute_density(self.SPLIT_URM_DICT["URM_test"]))
+
+
+        self._print(statistics_string)
 
         print("\n")
 
 
 
 
-
+    def get_ICM_from_name(self, ICM_name):
+        return self.SPLIT_ICM_DICT[ICM_name].copy()
 
 
     def get_statistics_ICM(self):
 
-        for ICM_name in self.dataReader_object.get_loaded_ICM_names():
+        self._assert_is_initialized()
 
-            ICM_object = getattr(self, ICM_name)
-            n_items = ICM_object.shape[0]
-            n_features = ICM_object.shape[1]
+        if len(self.dataReader_object.get_loaded_ICM_names())>0:
 
-            print("\t Statistics for {}: n_features {}, feature occurrences {}, density: {:.2E}".format(
-                ICM_name, n_features, ICM_object.nnz, ICM_object.nnz/(int(n_items)*int(n_features))
-            ))
+            for ICM_name, ICM_object in self.SPLIT_ICM_DICT.items():
 
-        print("\n")
+                n_items, n_features = ICM_object.shape
+
+                statistics_string = "\tICM name: {}, Num features: {}, feature occurrences: {}, density {:.2E}".format(
+                    ICM_name,
+                    n_features,
+                    ICM_object.nnz,
+                    compute_density(ICM_object)
+                )
+
+                print(statistics_string)
+
+            print("\n")
 
 
 
+    def _assert_is_initialized(self):
+         assert self.SPLIT_URM_DICT is not None, "{}: Unable to load data split. The split has not been generated yet, call the load_data function to do so.".format(self.DATA_SPLITTER_NAME)
 
 
     def get_holdout_split(self):
         """
         The train set is defined as all data except the one of that fold, which is the test
-        :param n_fold:
         :return: URM_train, URM_validation, URM_test
         """
 
-        return self.URM_train.copy(), self.URM_validation.copy(), self.URM_test.copy()
+        self._assert_is_initialized()
 
+        return self.SPLIT_URM_DICT["URM_train"].copy(),\
+               self.SPLIT_URM_DICT["URM_validation"].copy(),\
+               self.SPLIT_URM_DICT["URM_test"].copy()
+
+
+
+    def _load_from_DataReader_ICM_and_mappers(self):
+
+        self.SPLIT_ICM_DICT = self.dataReader_object.get_loaded_ICM_dict()
+        self.SPLIT_ICM_MAPPER_DICT = {}
+        self.SPLIT_GLOBAL_MAPPER_DICT = {}
+
+        for ICM_name in self.SPLIT_ICM_DICT.keys():
+            self.SPLIT_ICM_MAPPER_DICT[ICM_name] = self.get_dataReader_object().get_ICM_feature_to_index_mapper_from_name(ICM_name)
+
+        for mapper_name, mapper_object in self.dataReader_object.get_loaded_Global_mappers().items():
+            self.SPLIT_GLOBAL_MAPPER_DICT[mapper_name] = mapper_object.copy()
 
 
 
@@ -141,148 +183,107 @@ class DataSplitter_leave_k_out(DataSplitter):
 
 
         self.dataReader_object.load_data()
+        self._load_from_DataReader_ICM_and_mappers()
+
+
         URM = self.dataReader_object.get_URM_all()
         URM = sps.csr_matrix(URM)
 
+
         split_number = 2
-        if self.validation_set:
+        if self.use_validation_set:
             split_number+=1
 
-        # Min interactions at least self.k_value for each split +1 for train and validation
-        min_user_interactions = (split_number -1)*self.k_value +1
+
+        # Min interactions at least self.k_out_value for each split +1 for train and validation
+        min_user_interactions = (split_number -1) * self.k_out_value + 1
 
 
         if not self.allow_cold_users:
             user_interactions = np.ediff1d(URM.indptr)
             user_to_preserve = user_interactions >= min_user_interactions
+            user_to_remove = np.logical_not(user_to_preserve)
 
-            print("DataSplitter_leave_k_out: Removing {} ({:.2f} %) of {} users because they have less than the {} interactions required for {} splits".format(
-                 URM.shape[0] - user_to_preserve.sum(), (1-user_to_preserve.sum()/URM.shape[0])*100, URM.shape[0], min_user_interactions, split_number))
+            self._print("Removing {} ({:.2f} %) of {} users because they have less than the {} interactions required for {} splits ({} for test [and validation if requested] +1 for train)".format(
+                 URM.shape[0] - user_to_preserve.sum(), (1-user_to_preserve.sum()/URM.shape[0])*100, URM.shape[0], min_user_interactions, split_number, self.k_out_value))
 
             URM = URM[user_to_preserve,:]
 
-
-        self.n_users, self.n_items = URM.shape
-
-        URM = sps.csr_matrix(URM)
+            self.SPLIT_GLOBAL_MAPPER_DICT["user_original_ID_to_index"] = reconcile_mapper_with_removed_tokens(self.SPLIT_GLOBAL_MAPPER_DICT["user_original_ID_to_index"],
+                                                                                                              np.arange(0, len(user_to_remove), dtype=np.int)[user_to_remove])
 
 
 
-        URM_train_builder = IncrementalSparseMatrix(auto_create_row_mapper=False, n_rows = self.n_users,
-                                            auto_create_col_mapper=False, n_cols = self.n_items)
+        splitted_data = split_train_leave_k_out_user_wise(URM, k_out = self.k_out_value,
+                                                          use_validation_set = self.use_validation_set,
+                                                          leave_random_out = self.leave_random_out)
 
-        URM_test_builder = IncrementalSparseMatrix(auto_create_row_mapper=False, n_rows = self.n_users,
-                                            auto_create_col_mapper=False, n_cols = self.n_items)
+        if self.use_validation_set:
+            URM_train, URM_validation, URM_test = splitted_data
 
-        if self.validation_set:
-             URM_validation_builder = IncrementalSparseMatrix(auto_create_row_mapper=False, n_rows = self.n_users,
-                                                              auto_create_col_mapper=False, n_cols = self.n_items)
-
-
-
-        for user_id in range(self.n_users):
-
-            start_user_position = URM.indptr[user_id]
-            end_user_position = URM.indptr[user_id+1]
-
-            user_profile = URM.indices[start_user_position:end_user_position]
+        else:
+            URM_train, URM_test = splitted_data
 
 
-            if not self.leave_last_out:
-                indices_to_suffle = np.arange(len(user_profile), dtype=np.int)
 
-                np.random.shuffle(indices_to_suffle)
+        self.SPLIT_URM_DICT = {
+            "URM_train": URM_train,
+            "URM_test": URM_test,
+        }
 
-                user_interaction_items = user_profile[indices_to_suffle]
-                user_interaction_data = URM.data[start_user_position:end_user_position][indices_to_suffle]
+        if self.use_validation_set:
+            self.SPLIT_URM_DICT["URM_validation"] = URM_validation
+
+
+
+        self._save_split(save_folder_path)
+
+        self._print("Split complete")
+
+
+
+
+    def _save_split(self, save_folder_path):
+
+        if save_folder_path:
+
+            if self.allow_cold_users:
+                allow_cold_users_suffix = "allow_cold_users"
 
             else:
+                allow_cold_users_suffix = "only_warm_users"
 
-                # The first will be sampled so the last interaction must be the first one
-                interaction_position = URM.data[start_user_position:end_user_position]
-
-                sort_interaction_index = np.argsort(-interaction_position)
-
-                user_interaction_items = user_profile[sort_interaction_index]
-                user_interaction_data = URM.data[start_user_position:end_user_position][sort_interaction_index]
+            if self.use_validation_set:
+                validation_set_suffix = "use_validation_set"
+            else:
+                validation_set_suffix = "no_validation_set"
 
 
+            name_suffix = "_{}_{}".format(allow_cold_users_suffix, validation_set_suffix)
 
-
-
-
-            #Test interactions
-            user_interaction_items_test = user_interaction_items[0:self.k_value]
-            user_interaction_data_test = user_interaction_data[0:self.k_value]
-
-            URM_test_builder.add_data_lists([user_id]*self.k_value, user_interaction_items_test, user_interaction_data_test)
-
-
-            #validation interactions
-            if self.validation_set:
-                user_interaction_items_validation = user_interaction_items[self.k_value:self.k_value*2]
-                user_interaction_data_validation = user_interaction_data[self.k_value:self.k_value*2]
-
-                URM_validation_builder.add_data_lists([user_id]*self.k_value, user_interaction_items_validation, user_interaction_data_validation)
-
-
-            #Train interactions
-            user_interaction_items_train = user_interaction_items[self.k_value*2:]
-            user_interaction_data_train = user_interaction_data[self.k_value*2:]
-
-            URM_train_builder.add_data_lists([user_id]*len(user_interaction_items_train), user_interaction_items_train, user_interaction_data_train)
+            split_parameters_dict = {"k_out_value": self.k_out_value,
+                                     "allow_cold_users": self.allow_cold_users
+                                     }
 
 
 
-        self.URM_train = URM_train_builder.get_SparseMatrix()
-        self.URM_test = URM_test_builder.get_SparseMatrix()
+            dataIO = DataIO(folder_path = save_folder_path)
 
+            dataIO.save_data(data_dict_to_save = split_parameters_dict,
+                             file_name = "split_parameters" + name_suffix)
 
-        dict_to_save = {"k_value": self.k_value,
-                         "n_items": self.n_items,
-                         "n_users": self.n_users,
-                         "allow_cold_users": self.allow_cold_users
-                         }
+            dataIO.save_data(data_dict_to_save = self.SPLIT_GLOBAL_MAPPER_DICT,
+                             file_name = "split_mappers" + name_suffix)
 
+            dataIO.save_data(data_dict_to_save = self.SPLIT_URM_DICT,
+                             file_name = "split_URM" + name_suffix)
 
-        if self.validation_set:
-            self.URM_validation = URM_validation_builder.get_SparseMatrix()
-            validation_set_suffix = "validation_set"
-        else:
-            validation_set_suffix = "no_validation_set"
+            if len(self.dataReader_object.get_loaded_ICM_names())>0:
+                dataIO.save_data(data_dict_to_save = self.SPLIT_ICM_DICT,
+                                 file_name = "split_ICM" + name_suffix)
 
-
-        if self.allow_cold_users:
-            allow_cold_users_suffix = "allow_cold_users"
-        else:
-            allow_cold_users_suffix = "only_warm_users"
-
-
-        sps.save_npz(save_folder_path + "{}_{}_{}".format("URM_train", allow_cold_users_suffix, validation_set_suffix), self.URM_train)
-        sps.save_npz(save_folder_path + "{}_{}_{}".format("URM_test", allow_cold_users_suffix, validation_set_suffix), self.URM_test)
-
-        if self.validation_set:
-            sps.save_npz(save_folder_path + "{}_{}_{}".format("URM_validation", allow_cold_users_suffix, validation_set_suffix), self.URM_validation)
-
-
-        pickle.dump(dict_to_save,
-                    open(save_folder_path + "split_parameters_{}_{}".format(allow_cold_users_suffix, validation_set_suffix), "wb"),
-                    protocol=pickle.HIGHEST_PROTOCOL)
-
-
-
-        for ICM_name in self.dataReader_object.get_loaded_ICM_names():
-
-            ICM_object = self.dataReader_object.get_ICM_from_name(ICM_name)
-
-            sps.save_npz(save_folder_path + "{}".format(ICM_name), ICM_object)
-
-            pickle.dump(self.dataReader_object.get_ICM_feature_to_index_mapper_from_name(ICM_name),
-                        open(save_folder_path + "tokenToFeatureMapper_{}".format(ICM_name), "wb"),
-                        protocol=pickle.HIGHEST_PROTOCOL)
-
-        print("DataSplitter: Split complete")
-
+                dataIO.save_data(data_dict_to_save = self.SPLIT_ICM_MAPPER_DICT,
+                                 file_name = "split_ICM_mappers" + name_suffix)
 
 
 
@@ -292,8 +293,10 @@ class DataSplitter_leave_k_out(DataSplitter):
         Loads all URM and ICM
         :return:
         """
-        if self.validation_set:
-            validation_set_suffix = "validation_set"
+
+
+        if self.use_validation_set:
+            validation_set_suffix = "use_validation_set"
         else:
             validation_set_suffix = "no_validation_set"
 
@@ -303,24 +306,106 @@ class DataSplitter_leave_k_out(DataSplitter):
             allow_cold_users_suffix = "only_warm_users"
 
 
-        data_dict = pickle.load(open(save_folder_path + "split_parameters_{}_{}".format(allow_cold_users_suffix, validation_set_suffix), "rb"))
-
-        for attrib_name in data_dict.keys():
-             self.__setattr__(attrib_name, data_dict[attrib_name])
+        name_suffix = "_{}_{}".format(allow_cold_users_suffix, validation_set_suffix)
 
 
-        for ICM_name in self.dataReader_object.get_loaded_ICM_names():
+        dataIO = DataIO(folder_path = save_folder_path)
 
-            ICM_object = sps.load_npz(save_folder_path + "{}.npz".format(ICM_name))
-            self.__setattr__(ICM_name, ICM_object)
+        split_parameters_dict = dataIO.load_data(file_name ="split_parameters" + name_suffix)
 
-            pickle.load(open(save_folder_path + "tokenToFeatureMapper_{}".format(ICM_name), "rb"))
-            self.__setattr__("tokenToFeatureMapper_{}".format(ICM_name), ICM_object)
+        for attrib_name in split_parameters_dict.keys():
+             self.__setattr__(attrib_name, split_parameters_dict[attrib_name])
 
 
-        self.URM_train = sps.load_npz(save_folder_path + "{}_{}_{}.npz".format("URM_train", allow_cold_users_suffix, validation_set_suffix))
-        self.URM_test = sps.load_npz(save_folder_path + "{}_{}_{}.npz".format("URM_test", allow_cold_users_suffix, validation_set_suffix))
+        self.SPLIT_GLOBAL_MAPPER_DICT = dataIO.load_data(file_name ="split_mappers" + name_suffix)
 
-        if self.validation_set:
-            self.URM_validation = sps.load_npz(save_folder_path + "{}_{}_{}.npz".format("URM_validation", allow_cold_users_suffix, validation_set_suffix))
+        self.SPLIT_URM_DICT = dataIO.load_data(file_name ="split_URM" + name_suffix)
+
+        if len(self.dataReader_object.get_loaded_ICM_names())>0:
+            self.SPLIT_ICM_DICT = dataIO.load_data(file_name ="split_ICM" + name_suffix)
+
+            self.SPLIT_ICM_MAPPER_DICT = dataIO.load_data(file_name ="split_ICM_mappers" + name_suffix)
+
+
+
+    #########################################################################################################
+    ##########                                                                                     ##########
+    ##########                                DATA CONSISTENCY                                     ##########
+    ##########                                                                                     ##########
+    #########################################################################################################
+
+
+    def _verify_data_consistency(self):
+
+        self._assert_is_initialized()
+
+        print_preamble = "{} consistency check: ".format(self.DATA_SPLITTER_NAME)
+
+        URM_to_load_list = ["URM_train", "URM_test"]
+
+        if self.use_validation_set:
+            URM_to_load_list.append("URM_validation")
+
+
+        assert len(self.SPLIT_URM_DICT) == len(URM_to_load_list),\
+            print_preamble + "The available URM are not as many as they are supposed to be. URMs are {}, expected URMs are {}".format(len(self.SPLIT_URM_DICT), len(URM_to_load_list))
+
+
+        assert all(URM_name in self.SPLIT_URM_DICT for URM_name in URM_to_load_list), print_preamble + "Not all URMs have been created"
+        assert all(URM_name in URM_to_load_list for URM_name in self.SPLIT_URM_DICT.keys()), print_preamble + "The split contains URMs that should not exist"
+
+
+        URM_shape = None
+
+        for URM_name, URM_object in self.SPLIT_URM_DICT.items():
+
+            if URM_shape is None:
+                URM_shape = URM_object.shape
+
+                n_users, n_items = URM_shape
+
+                assert n_users != 0,  print_preamble + "Number of users in URM is 0"
+                assert n_items != 0,  print_preamble + "Number of items in URM is 0"
+
+            assert URM_shape == URM_object.shape,  print_preamble + "URM shape is inconsistent"
+
+
+        assert self.SPLIT_URM_DICT["URM_train"].nnz != 0, print_preamble + "Number of interactions in URM Train is 0"
+        assert self.SPLIT_URM_DICT["URM_test"].nnz != 0, print_preamble + "Number of interactions in URM Test is 0"
+
+
+        URM = self.SPLIT_URM_DICT["URM_test"].copy()
+        user_interactions = np.ediff1d(sps.csr_matrix(URM).indptr)
+
+        assert np.all(user_interactions == self.k_out_value), print_preamble + "Not all users have the desired number of interactions in URM_test, {} users out of {}".format(
+            (user_interactions != self.k_out_value).sum(), n_users)
+
+
+
+        if self.use_validation_set:
+            assert self.SPLIT_URM_DICT["URM_validation"].nnz != 0, print_preamble + "Number of interactions in URM Validation is 0"
+
+            URM = self.SPLIT_URM_DICT["URM_validation"].copy()
+            user_interactions = np.ediff1d(sps.csr_matrix(URM).indptr)
+
+            assert np.all(user_interactions == self.k_out_value), print_preamble + "Not all users have the desired number of interactions in URM_validation, {} users out of {}".format(
+                (user_interactions != self.k_out_value).sum(), n_users)
+
+
+
+        URM = self.SPLIT_URM_DICT["URM_train"].copy()
+        user_interactions = np.ediff1d(sps.csr_matrix(URM).indptr)
+
+        if not self.allow_cold_users:
+            assert np.all(user_interactions != 0), print_preamble + "Cold users exist despite not being allowed as per DataSplitter parameters, {} users out of {}".format(
+                (user_interactions == 0).sum(), n_users)
+
+
+        assert assert_disjoint_matrices(list(self.SPLIT_URM_DICT.values()))
+
+        assert_URM_ICM_mapper_consistency(URM_DICT = self.SPLIT_URM_DICT,
+                                          GLOBAL_MAPPER_DICT = self.SPLIT_GLOBAL_MAPPER_DICT,
+                                          ICM_DICT = self.SPLIT_ICM_DICT,
+                                          ICM_MAPPER_DICT = self.SPLIT_ICM_MAPPER_DICT,
+                                          DATA_SPLITTER_NAME = self.DATA_SPLITTER_NAME)
 

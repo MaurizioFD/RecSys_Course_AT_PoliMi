@@ -167,6 +167,37 @@ def urllretrieve_reporthook(count, block_size, total_size):
 
 
 from Base.Recommender_utils import check_matrix
+import  scipy.sparse as sps
+
+
+def merge_ICM(ICM1, ICM2, mapper_ICM1, mapper_ICM2):
+
+    ICM_all = sps.hstack([ICM1, ICM2], format='csr')
+
+    mapper_ICM_all = mapper_ICM1.copy()
+
+    for key in mapper_ICM2.keys():
+        mapper_ICM_all[key] = mapper_ICM2[key] + len(mapper_ICM1)
+
+    return  ICM_all, mapper_ICM_all
+
+
+
+def compute_density(URM):
+
+    n_users, n_items = URM.shape
+    n_interactions = URM.nnz
+
+    # This avoids the fixed bit representation of numpy preventing
+    # an overflow when computing the product
+    n_items = float(n_items)
+    n_users = float(n_users)
+
+    if n_interactions == 0:
+        return 0.0
+
+    return n_interactions/(n_items*n_users)
+
 
 
 
@@ -211,7 +242,7 @@ def removeFeatures(ICM, minOccurrence = 5, maxPercOccurrence = 0.30, reconcile_m
 
 
 
-def reconcile_mapper_with_removed_tokens(mapper_dict, indices_to_remove):
+def reconcile_mapper_with_removed_tokens(key_to_value_dict, values_to_remove):
     """
 
     :param mapper_dict: must be a mapper of [token] -> index
@@ -223,33 +254,82 @@ def reconcile_mapper_with_removed_tokens(mapper_dict, indices_to_remove):
     # - Delete the corresponding key
     # - Decrement all greater indices
 
-    indices_to_remove = set(indices_to_remove)
-    removed_indices = []
-
-    # Copy key set
-    dict_keys = list(mapper_dict.keys())
-
-    # Step 1, delete all values
-    for key in dict_keys:
-
-        if mapper_dict[key] in indices_to_remove:
-
-            removed_indices.append(mapper_dict[key])
-            del mapper_dict[key]
-
-
-    removed_indices = np.array(removed_indices)
-
-
-    # Step 2, decrement all remaining indices to fill gaps
-    # Every index has to be decremented by the number of deleted tokens with lower index
-    for key in mapper_dict.keys():
-
-        lower_index_elements = np.sum(removed_indices<mapper_dict[key])
-        mapper_dict[key] -= lower_index_elements
+    # indices_to_remove = set(indices_to_remove)
+    # removed_indices = []
+    #
+    # # Copy key set
+    # dict_keys = list(mapper_dict.keys())
+    #
+    # # Step 1, delete all values
+    # for key in dict_keys:
+    #
+    #     if mapper_dict[key] in indices_to_remove:
+    #
+    #         removed_indices.append(mapper_dict[key])
+    #         del mapper_dict[key]
+    #
+    #
+    # removed_indices = np.array(removed_indices)
 
 
-    return mapper_dict
+
+
+    # # Step 2, decrement all remaining indices to fill gaps
+    # # Every index has to be decremented by the number of deleted tokens with lower index
+    # for key in mapper_dict.keys():
+    #
+    #     lower_index_elements = np.sum(removed_indices<mapper_dict[key])
+    #     mapper_dict[key] -= lower_index_elements
+
+
+
+    # Get all values of the mapper into an array to speed-up the decrementing process
+    # We need a 1-to-1 association between the mapper key and the array position
+
+    # Assumptions: in dictionary mapper_dict there is a 1-to-1 association to an index
+    assert len(set(key_to_value_dict.values())) == len(key_to_value_dict), "mapper_dict values do not have a 1-to-1 correspondance with the key"
+
+    # The value is an index, so we can use it to be both the value and the index of an array.
+    # We do not assume values to be contiguous, the missing ones will be -np.inf
+    mapper_values_array = np.ones(max(key_to_value_dict.values())+1, dtype=np.int) * -np.inf
+
+    value_to_key = invert_dictionary(key_to_value_dict)
+
+
+    # Set all old indices
+    for key, old_index in key_to_value_dict.items():
+        mapper_values_array[old_index] = old_index
+
+
+    # Set to -np.inf all indices to be removed
+    # Remove keys in original dictionary
+    for value_to_remove in values_to_remove:
+
+        mapper_values_array[value_to_remove] = -np.inf
+
+        assert value_to_remove in value_to_key, "Value to be removed from dictionary is not in dictionary"
+
+        key_to_remove = value_to_key[value_to_remove]
+
+        del key_to_value_dict[key_to_remove]
+
+
+    # To update the indices, start from 0 and allocate the index n to the n-th finite value in mapper_values_array
+    # Use cumulative sum, each cell is equals to the number of finite (e.g. valid) cells before
+    # Ensure the first index is 0 and not 1
+    mapper_values_array_finite = np.isfinite(mapper_values_array)
+
+    mapper_values_array_new_indices = np.cumsum(mapper_values_array_finite)
+    mapper_values_array_new_indices -= 1
+
+    # Replace old value with new
+    for key, old_index in key_to_value_dict.items():
+
+        new_index = mapper_values_array_new_indices[old_index]
+        key_to_value_dict[key] = new_index
+
+
+    return key_to_value_dict
 
 
 
@@ -294,6 +374,8 @@ def invert_dictionary(id_to_index):
 
     for id in id_to_index.keys():
         index = id_to_index[id]
+
+        assert index not in index_to_id, "Dictionary is not invertible as it contains duplicate values."
         index_to_id[index] = id
 
     return index_to_id

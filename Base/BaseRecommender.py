@@ -6,7 +6,8 @@
 """
 
 import numpy as np
-import pickle, os
+from Base.DataIO import DataIO
+import os
 from Base.Recommender_utils import check_matrix
 
 
@@ -32,6 +33,17 @@ class BaseRecommender(object):
         self.items_to_ignore_flag = False
         self.items_to_ignore_ID = np.array([], dtype=np.int)
 
+        self._cold_user_mask = np.ediff1d(self.URM_train.indptr) == 0
+
+        if self._cold_user_mask.any():
+            print("{}: Detected {} ({:.2f} %) cold users.".format(
+                self.RECOMMENDER_NAME, self._cold_user_mask.sum(), self._cold_user_mask.sum()/len(self._cold_user_mask)*100))
+
+
+
+    def _get_cold_user_mask(self):
+        return self._cold_user_mask
+
 
     def fit(self):
         pass
@@ -46,7 +58,15 @@ class BaseRecommender(object):
         if len(kwargs)>0:
             print("{}: set_URM_train keyword arguments not supported for this recommender class. Received: {}".format(self.RECOMMENDER_NAME, kwargs))
 
-        self.URM_train = URM_train_new.copy()
+        self.URM_train = check_matrix(URM_train_new.copy(), 'csr', dtype=np.float32)
+        self.URM_train.eliminate_zeros()
+
+        self._cold_user_mask = np.ediff1d(self.URM_train.indptr) == 0
+
+        if self._cold_user_mask.any():
+            print("{}: Detected {} ({:.2f} %) cold users.".format(
+                self.RECOMMENDER_NAME, self._cold_user_mask.sum(), self._cold_user_mask.sum()/len(self._cold_user_mask)*100))
+
 
 
     def set_items_to_ignore(self, items_to_ignore):
@@ -244,8 +264,8 @@ class BaseRecommender(object):
 
         print("{}: Loading model from file '{}'".format(self.RECOMMENDER_NAME, folder_path + file_name))
 
-
-        data_dict = pickle.load(open(folder_path + file_name, "rb"))
+        dataIO = DataIO(folder_path=folder_path)
+        data_dict = dataIO.load_data(file_name=file_name)
 
         for attrib_name in data_dict.keys():
              self.__setattr__(attrib_name, data_dict[attrib_name])

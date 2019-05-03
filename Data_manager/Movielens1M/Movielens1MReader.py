@@ -85,6 +85,7 @@ class Movielens1MReader(DataReader):
 
     DATASET_URL = "http://files.grouplens.org/datasets/movielens/ml-1m.zip"
     DATASET_SUBFOLDER = "Movielens1M/"
+    AVAILABLE_URM = ["URM_all", "URM_timestamp"]
     AVAILABLE_ICM = ["ICM_genres"]
     AVAILABLE_UCM = ["UCM_all"]
     DATASET_SPECIFIC_MAPPER = []
@@ -122,22 +123,27 @@ class Movielens1MReader(DataReader):
         URM_path = dataFile.extract("ml-1m/ratings.dat", path=zipFile_path + "decompressed/")
 
 
-        self.tokenToFeatureMapper_ICM_genres = {}
         self.tokenToFeatureMapper_UCM_all = {}
 
         print("Movielens1MReader: loading genres")
-        self.ICM_genres, self.tokenToFeatureMapper_ICM_genres, self.item_original_ID_to_index = _loadICM_genres(ICM_genre_path, header=True, separator='::', genresSeparator="|")
+        ICM_genres, tokenToFeatureMapper_ICM_genres, self.item_original_ID_to_index = _loadICM_genres(ICM_genre_path, header=True, separator='::', genresSeparator="|")
+
+        self._LOADED_ICM_DICT["ICM_genres"] = ICM_genres
+        self._LOADED_ICM_MAPPER_DICT["ICM_genres"] = tokenToFeatureMapper_ICM_genres
 
         print("Movielens1MReader: loading UCM")
         self.UCM_all, self.tokenToFeatureMapper_UCM_all, self.user_original_ID_to_index = _loadUCM(UCM_path, header=True, separator='::')
 
         print("Movielens1MReader: loading URM")
-        self.URM_all, self.item_original_ID_to_index, self.user_original_ID_to_index = _loadURM_preinitialized_item_id(URM_path, separator="::",
-                                                                                          header = True, if_new_user = "ignore", if_new_item = "ignore",
+        URM_all, self.item_original_ID_to_index, self.user_original_ID_to_index, URM_timestamp = _loadURM_preinitialized_item_id(URM_path, separator="::",
+                                                                                          header = False, if_new_user = "ignore", if_new_item = "ignore",
                                                                                           item_original_ID_to_index = self.item_original_ID_to_index,
                                                                                           user_original_ID_to_index = self.user_original_ID_to_index)
 
-
+        self._LOADED_URM_DICT["URM_all"] = URM_all
+        self._LOADED_URM_DICT["URM_timestamp"] = URM_timestamp
+        self._LOADED_GLOBAL_MAPPER_DICT["user_original_ID_to_index"] = self.user_original_ID_to_index
+        self._LOADED_GLOBAL_MAPPER_DICT["item_original_ID_to_index"] = self.item_original_ID_to_index
 
         print("Movielens1MReader: cleaning temporary files")
 

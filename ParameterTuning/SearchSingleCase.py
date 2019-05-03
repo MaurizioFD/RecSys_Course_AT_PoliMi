@@ -7,7 +7,7 @@ Created on 14/12/18
 """
 
 import os
-
+from Base.DataIO import DataIO
 from ParameterTuning.SearchAbstractClass import writeLog
 from ParameterTuning.SearchBayesianSkopt import SearchBayesianSkopt
 
@@ -25,18 +25,20 @@ class SearchSingleCase(SearchBayesianSkopt):
 
 
 
-    def search(self, recommender_constructor_data,
+    def search(self, recommender_input_args,
                fit_parameters_values = None,
                metric_to_optimize = "MAP",
                output_folder_path = None,
                output_file_name_root = None,
                save_metadata = True,
+               recommender_input_args_last_test = None,
                ):
 
 
         assert fit_parameters_values is not None, "{}: fit_parameters_values must contain a dictionary".format(self.ALGORITHM_NAME)
 
-        self.recommender_constructor_data = recommender_constructor_data
+        self.recommender_input_args = recommender_input_args
+        self.recommender_input_args_last_test = recommender_input_args_last_test
         self.metric_to_optimize = metric_to_optimize
         self.output_folder_path = output_folder_path
         self.output_file_name_root = output_file_name_root
@@ -58,18 +60,24 @@ class SearchSingleCase(SearchBayesianSkopt):
         self.hyperparams_names = {}
         self.hyperparams_single_value = {}
 
+        # In case of earlystopping the best_solution_parameters will contain also the number of epochs
+        self.best_solution_parameters = fit_parameters_values.copy()
+
 
         if self.save_metadata:
             self._init_metadata_dict()
+            self.dataIO = DataIO(folder_path = self.output_folder_path)
 
 
         self._objective_function(fit_parameters_values)
 
         writeLog("{}: Search complete. Best config is {}: {}\n".format(self.ALGORITHM_NAME,
                                                                        self.best_solution_counter,
-                                                                       fit_parameters_values), self.log_file)
+                                                                       self.best_solution_parameters), self.log_file)
 
 
+        if self.recommender_input_args_last_test is not None:
+            self._evaluate_on_test_with_data_last()
 
 
 

@@ -7,7 +7,7 @@ Created on 16/09/2017
 """
 
 from Base.BaseRecommender import BaseRecommender
-import pickle
+from Base.DataIO import DataIO
 import numpy as np
 
 
@@ -47,6 +47,11 @@ class BaseSimilarityMatrixRecommender(BaseRecommender):
         else:
             item_scores = user_profile_array.dot(self.W_sparse).toarray()
 
+        # Set as -inf all cold user scores
+        if self._get_cold_user_mask().any():
+            cold_users_batch_mask = self._get_cold_user_mask()[user_id_array]
+            item_scores[cold_users_batch_mask, :] = - np.ones_like(item_scores[cold_users_batch_mask, :]) * np.inf
+
         return item_scores
 
 
@@ -68,6 +73,11 @@ class BaseSimilarityMatrixRecommender(BaseRecommender):
             item_scores[:, items_to_compute] = item_scores_all[:, items_to_compute]
         else:
             item_scores = user_weights_array.dot(self.URM_train).toarray()
+
+        # Set as -inf all cold user scores
+        if self._get_cold_user_mask().any():
+            cold_users_batch_mask = self._get_cold_user_mask()[user_id_array]
+            item_scores[cold_users_batch_mask, :] = - np.ones_like(item_scores[cold_users_batch_mask, :]) * np.inf
 
         return item_scores
 
@@ -96,11 +106,9 @@ class BaseSimilarityMatrixRecommender(BaseRecommender):
 
         print("{}: Saving model in file '{}'".format(self.RECOMMENDER_NAME, folder_path + file_name))
 
-        dictionary_to_save = {"W_sparse": self.W_sparse}
+        data_dict_to_save = {"W_sparse": self.W_sparse}
 
-
-        pickle.dump(dictionary_to_save,
-                    open(folder_path + file_name, "wb"),
-                    protocol=pickle.HIGHEST_PROTOCOL)
+        dataIO = DataIO(folder_path=folder_path)
+        dataIO.save_data(file_name=file_name, data_dict_to_save = data_dict_to_save)
 
         print("{}: Saving complete".format(self.RECOMMENDER_NAME))

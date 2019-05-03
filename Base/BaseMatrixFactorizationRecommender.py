@@ -9,7 +9,7 @@ Created on 16/09/2017
 from Base.BaseRecommender import BaseRecommender
 from KNN.ItemKNNCustomSimilarityRecommender import ItemKNNCustomSimilarityRecommender
 from Base.Recommender_utils import check_matrix
-import pickle
+from Base.DataIO import DataIO
 import numpy as np
 import scipy.sparse as sps
 
@@ -86,17 +86,8 @@ class BaseMatrixFactorizationRecommender(BaseRecommender):
 
         self.use_bias = False
 
-        self._cold_user_mask = np.ediff1d(self.URM_train.indptr) == 0
         self._cold_user_KNN_model_available = False
-        self._warm_user_KNN_mask = np.zeros(len(self._cold_user_mask), dtype=np.bool)
-
-        if self._cold_user_mask.any():
-            print("{}: Detected {} ({:.2f} %) cold users.".format(
-                self.RECOMMENDER_NAME, self._cold_user_mask.sum(), self._cold_user_mask.sum()/len(self._cold_user_mask)*100))
-
-
-    def _get_cold_user_mask(self):
-        return self._cold_user_mask
+        self._warm_user_KNN_mask = np.zeros(len(self._get_cold_user_mask()), dtype=np.bool)
 
 
 
@@ -217,20 +208,18 @@ class BaseMatrixFactorizationRecommender(BaseRecommender):
 
         print("{}: Saving model in file '{}'".format(self.RECOMMENDER_NAME, folder_path + file_name))
 
-        dictionary_to_save = {"USER_factors": self.USER_factors,
+        data_dict_to_save = {"USER_factors": self.USER_factors,
                               "ITEM_factors": self.ITEM_factors,
                               "use_bias": self.use_bias,
                               "_cold_user_mask": self._cold_user_mask}
 
         if self.use_bias:
-            dictionary_to_save["ITEM_bias"] = self.ITEM_bias
-            dictionary_to_save["USER_bias"] = self.USER_bias
-            dictionary_to_save["GLOBAL_bias"] = self.GLOBAL_bias
+            data_dict_to_save["ITEM_bias"] = self.ITEM_bias
+            data_dict_to_save["USER_bias"] = self.USER_bias
+            data_dict_to_save["GLOBAL_bias"] = self.GLOBAL_bias
 
-
-        pickle.dump(dictionary_to_save,
-                    open(folder_path + file_name, "wb"),
-                    protocol=pickle.HIGHEST_PROTOCOL)
+        dataIO = DataIO(folder_path=folder_path)
+        dataIO.save_data(file_name=file_name, data_dict_to_save = data_dict_to_save)
 
 
         print("{}: Saving complete".format(self.RECOMMENDER_NAME, folder_path + file_name))

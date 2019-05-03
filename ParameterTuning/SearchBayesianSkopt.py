@@ -6,13 +6,14 @@ Created on 14/12/18
 @author: Emanuele Chioso, Maurizio Ferrari Dacrema
 """
 
-import pickle, time, os, traceback
+import time, os, traceback
 import numpy as np
+from Base.DataIO import DataIO
 
 from skopt import gp_minimize
 from skopt.space import Real, Integer, Categorical
 
-from ParameterTuning.SearchAbstractClass import SearchAbstractClass, writeLog
+from ParameterTuning.SearchAbstractClass import SearchAbstractClass, writeLog, get_result_string_evaluate_on_validation
 from Base.Incremental_Training_Early_Stopping import Incremental_Training_Early_Stopping
 
 
@@ -73,7 +74,8 @@ class SearchBayesianSkopt(SearchAbstractClass):
 
     def _init_metadata_dict(self):
 
-        self.metadata_dict = {"algorithm_name": self.ALGORITHM_NAME,
+        self.metadata_dict = {"search_algorithm_name": self.ALGORITHM_NAME,
+                              "algorithm_name": self.recommender_class.RECOMMENDER_NAME,
                               "parameters_list": [None]*self.n_calls,
                               "validation_result_list": [None]*self.n_calls,
                               "train_time_list": [None]*self.n_calls,
@@ -88,6 +90,10 @@ class SearchBayesianSkopt(SearchAbstractClass):
                               "evaluation_test_time_total": 0.0,
                               "evaluation_test_time_avg": 0.0,
 
+                              "full_data_test_result": None,
+                              "full_data_train_time": None,
+                              "evaluation_full_data_test_time": None,
+
                               "best_parameters": None,
                               "best_parameters_index": None,
                               "best_result_validation": None,
@@ -97,7 +103,7 @@ class SearchBayesianSkopt(SearchAbstractClass):
 
 
 
-    def search(self, recommender_constructor_data,
+    def search(self, recommender_input_args,
                parameter_search_space,
                metric_to_optimize = "MAP",
                n_cases = 20,
@@ -106,6 +112,7 @@ class SearchBayesianSkopt(SearchAbstractClass):
                output_file_name_root = None,
                save_model = "best",
                save_metadata = True,
+               recommender_input_args_last_test = None,
                ):
 
         assert save_model in ["no", "all", "best"], "{}: parameter save_model must be in '['no', 'all', 'best']', provided was '{}'.".format(self.ALGORITHM_NAME, save_model)
@@ -115,7 +122,8 @@ class SearchBayesianSkopt(SearchAbstractClass):
 
         self._set_skopt_params()    ### default parameters are set here
 
-        self.recommender_constructor_data = recommender_constructor_data
+        self.recommender_input_args = recommender_input_args
+        self.recommender_input_args_last_test = recommender_input_args_last_test
         self.parameter_search_space = parameter_search_space
         self.metric_to_optimize = metric_to_optimize
         self.output_folder_path = output_folder_path
@@ -140,7 +148,7 @@ class SearchBayesianSkopt(SearchAbstractClass):
 
         if self.save_metadata:
             self._init_metadata_dict()
-
+            self.dataIO = DataIO(folder_path = self.output_folder_path)
 
 
 
@@ -162,7 +170,7 @@ class SearchBayesianSkopt(SearchAbstractClass):
                 self.hyperparams_single_value[name] = hyperparam
 
             else:
-                raise ValueError("{}: Unexpected paramether type: {} - {}".format(self.ALGORITHM_NAME, str(name), str(hyperparam)))
+                raise ValueError("{}: Unexpected parameter type: {} - {}".format(self.ALGORITHM_NAME, str(name), str(hyperparam)))
 
 
 
@@ -185,25 +193,31 @@ class SearchBayesianSkopt(SearchAbstractClass):
                                   noise=self.noise,
                                   n_jobs=self.n_jobs)
 
+
         writeLog("{}: Search complete. Best config is {}: {}\n".format(self.ALGORITHM_NAME, self.best_solution_counter, self.best_solution_parameters), self.log_file)
 
 
+        if self.recommender_input_args_last_test is not None:
+            self._evaluate_on_test_with_data_last()
 
 
-    def _evaluate(self, current_fit_parameters):
+
+
+
+    def _evaluate_on_validation(self, current_fit_parameters):
 
         start_time = time.time()
 
         # Construct a new recommender instance
-        recommender_instance = self.recommender_class(*self.recommender_constructor_data.CONSTRUCTOR_POSITIONAL_ARGS,
-                                                      **self.recommender_constructor_data.CONSTRUCTOR_KEYWORD_ARGS)
+        recommender_instance = self.recommender_class(*self.recommender_input_args.CONSTRUCTOR_POSITIONAL_ARGS,
+                                                      **self.recommender_input_args.CONSTRUCTOR_KEYWORD_ARGS)
 
 
         print("{}: Testing config:".format(self.ALGORITHM_NAME), current_fit_parameters)
 
 
-        recommender_instance.fit(*self.recommender_constructor_data.FIT_POSITIONAL_ARGS,
-                                 **self.recommender_constructor_data.FIT_KEYWORD_ARGS,
+        recommender_instance.fit(*self.recommender_input_args.FIT_POSITIONAL_ARGS,
+                                 **self.recommender_input_args.FIT_KEYWORD_ARGS,
                                  **current_fit_parameters,
                                  **self.hyperparams_single_value)
 
@@ -211,10 +225,12 @@ class SearchBayesianSkopt(SearchAbstractClass):
         start_time = time.time()
 
         # Evaluate recommender and get results for the first cutoff
-        result_dict, result_string = self.evaluator_validation.evaluateRecommender(recommender_instance)
+        result_dict, _ = self.evaluator_validation.evaluateRecommender(recommender_instance)
         result_dict = result_dict[list(result_dict.keys())[0]]
 
         evaluation_time = time.time() - start_time
+
+        result_string = get_result_string_evaluate_on_validation(result_dict, n_decimals=7)
 
         return result_dict, result_string, recommender_instance, train_time, evaluation_time
 
@@ -224,7 +240,7 @@ class SearchBayesianSkopt(SearchAbstractClass):
 
 
 
-    def _evaluate_on_test(self, recommender_instance):
+    def _evaluate_on_test(self, recommender_instance, print_log = True):
 
         start_time = time.time()
 
@@ -233,11 +249,57 @@ class SearchBayesianSkopt(SearchAbstractClass):
 
         evaluation_test_time = time.time() - start_time
 
-        writeLog("{}: Best result evaluated on URM_test. Config: {} - results:\n{}\n".format(self.ALGORITHM_NAME,
+        if print_log:
+            writeLog("{}: Best config evaluated with evaluator_test. Config: {} - results:\n{}\n".format(self.ALGORITHM_NAME,
+                                                                                                 self.best_solution_parameters,
+                                                                                                 result_string), self.log_file)
+
+        return result_dict, result_string, evaluation_test_time
+
+
+
+    def _evaluate_on_test_with_data_last(self):
+
+        start_time = time.time()
+
+        # Construct a new recommender instance
+        recommender_instance = self.recommender_class(*self.recommender_input_args_last_test.CONSTRUCTOR_POSITIONAL_ARGS,
+                                                      **self.recommender_input_args_last_test.CONSTRUCTOR_KEYWORD_ARGS)
+
+
+        print("{}: Evaluation with constructor data for final test. Using best config:".format(self.ALGORITHM_NAME), self.best_solution_parameters)
+
+        # If the recommender uses Earlystopping,
+        # disable earlystopping forcing the best_solution_parameters number of epochs
+        # Disable earlystopping by removing the evaluator
+        fit_keyword_args = self.recommender_input_args_last_test.FIT_KEYWORD_ARGS.copy()
+
+        if isinstance(recommender_instance, Incremental_Training_Early_Stopping):
+            if "evaluator_object" in fit_keyword_args:
+                fit_keyword_args["evaluator_object"] = None
+
+
+        recommender_instance.fit(*self.recommender_input_args_last_test.FIT_POSITIONAL_ARGS,
+                                 **fit_keyword_args,
+                                 **self.best_solution_parameters,
+                                 **self.hyperparams_single_value)
+
+        train_time = time.time() - start_time
+
+        result_dict_test, result_string, evaluation_test_time = self._evaluate_on_test(recommender_instance, print_log = False)
+
+        self.metadata_dict["full_data_test_result"] = result_dict_test
+        self.metadata_dict["full_data_train_time"] = train_time
+        self.metadata_dict["evaluation_full_data_test_time"] = evaluation_test_time
+
+        writeLog("{}: Best config evaluated with evaluator_test with constructor data for final test. Config: {} - results:\n{}\n".format(self.ALGORITHM_NAME,
                                                                                              self.best_solution_parameters,
                                                                                              result_string), self.log_file)
 
-        return result_dict, evaluation_test_time
+        if self.save_metadata:
+            self.dataIO.save_data(data_dict_to_save = self.metadata_dict.copy(),
+                                  file_name = self.output_file_name_root + "_metadata")
+
 
 
     def _objective_function_list_input(self, current_fit_parameters_list_of_values):
@@ -252,7 +314,7 @@ class SearchBayesianSkopt(SearchAbstractClass):
 
         try:
 
-            result_dict, _, recommender_instance, train_time, evaluation_time = self._evaluate(current_fit_parameters_dict)
+            result_dict, result_string, recommender_instance, train_time, evaluation_time = self._evaluate_on_validation(current_fit_parameters_dict)
 
             current_result = - result_dict[self.metric_to_optimize]
 
@@ -298,7 +360,7 @@ class SearchBayesianSkopt(SearchAbstractClass):
                 writeLog("{}: New best config found. Config {}: {} - results: {}\n".format(self.ALGORITHM_NAME,
                                                                                            self.model_counter,
                                                                                            current_fit_parameters_dict,
-                                                                                           result_dict), self.log_file)
+                                                                                           result_string), self.log_file)
 
                 self.best_solution_val = result_dict[self.metric_to_optimize]
                 self.best_solution_counter = self.model_counter
@@ -319,7 +381,7 @@ class SearchBayesianSkopt(SearchAbstractClass):
 
 
                 if self.evaluator_test is not None:
-                    result_dict_test, evaluation_test_time = self._evaluate_on_test(recommender_instance)
+                    result_dict_test, _, evaluation_test_time = self._evaluate_on_test(recommender_instance, print_log = True)
 
 
                     if self.save_metadata:
@@ -338,15 +400,13 @@ class SearchBayesianSkopt(SearchAbstractClass):
                 writeLog("{}: Config {} is suboptimal. Config: {} - results: {}\n".format(self.ALGORITHM_NAME,
                                                                                           self.model_counter,
                                                                                           current_fit_parameters_dict,
-                                                                                          result_dict), self.log_file)
+                                                                                          result_string), self.log_file)
 
 
 
             if self.save_metadata:
-
-                pickle.dump(self.metadata_dict.copy(),
-                            open(self.output_folder_path + self.output_file_name_root + "_metadata", "wb"),
-                            protocol=pickle.HIGHEST_PROTOCOL)
+                self.dataIO.save_data(data_dict_to_save = self.metadata_dict.copy(),
+                                      file_name = self.output_file_name_root + "_metadata")
 
 
             if current_result >= self.INVALID_CONFIG_VALUE:

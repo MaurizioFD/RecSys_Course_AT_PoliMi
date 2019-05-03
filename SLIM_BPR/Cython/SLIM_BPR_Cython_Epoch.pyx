@@ -4,10 +4,10 @@ Created on 07/09/17
 @author: Maurizio Ferrari Dacrema
 """
 
+#cython: language_level=3
 #cython: boundscheck=False
 #cython: wraparound=False
 #cython: initializedcheck=False
-#cython: language_level=3
 #cython: nonecheck=False
 #cython: cdivision=True
 #cython: unpack_method_calls=True
@@ -33,12 +33,13 @@ ELSE:
 
 from Base.Recommender_utils import similarityMatrixTopK, check_matrix
 import numpy as np
+import cython
 cimport numpy as np
 import time
 import sys
 
 from libc.math cimport exp, sqrt
-from libc.stdlib cimport rand, RAND_MAX
+from libc.stdlib cimport rand, srand, RAND_MAX
 
 
 cdef struct BPR_sample:
@@ -49,19 +50,19 @@ cdef struct BPR_sample:
     long seen_items_end_pos
 
 
-
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.initializedcheck(False)
+@cython.nonecheck(False)
+@cython.cdivision(True)
+@cython.overflowcheck(False)
 cdef class SLIM_BPR_Cython_Epoch:
 
-    cdef int n_users
-    cdef int n_items
-    cdef int numPositiveIteractions
+    cdef int n_users, n_items, batch_size
     cdef int topK
     cdef int symmetric, train_with_sparse_weights, final_model_sparse_weights
 
     cdef double learning_rate, li_reg, lj_reg
-
-    cdef int batch_size
-
 
     cdef int[:] URM_mask_indices, URM_mask_indptr
 
@@ -88,14 +89,16 @@ cdef class SLIM_BPR_Cython_Epoch:
                  final_model_sparse_weights = True,
                  learning_rate = 0.01, li_reg = 0.0, lj_reg = 0.0,
                  batch_size = 1, topK = 150, symmetric = True,
-                 verbose = False,
+                 verbose = False, random_seed = None,
                  sgd_mode='adam', gamma=0.995, beta_1=0.9, beta_2=0.999):
 
         super(SLIM_BPR_Cython_Epoch, self).__init__()
 
+        # Create copy of URM_train in csr format
+        # make sure indices are sorted
         URM_mask = check_matrix(URM_mask, 'csr')
+        URM_mask = URM_mask.sorted_indices()
 
-        self.numPositiveIteractions = int(URM_mask.nnz * 1)
         self.n_users = URM_mask.shape[0]
         self.n_items = URM_mask.shape[1]
         self.topK = topK
@@ -124,6 +127,9 @@ cdef class SLIM_BPR_Cython_Epoch:
             self.S_symmetric = Triangular_Matrix(self.n_items, isSymmetric = True)
         else:
             self.S_dense = np.zeros((self.n_items, self.n_items), dtype=np.float64)
+
+        if random_seed is not None:
+            srand(<unsigned> random_seed)
 
 
         self.useAdaGrad = False
@@ -192,7 +198,7 @@ cdef class SLIM_BPR_Cython_Epoch:
     def epochIteration_Cython(self):
 
         # Get number of available interactions
-        cdef long totalNumberOfBatch = int(self.numPositiveIteractions / self.batch_size) + 1
+        cdef long totalNumberOfBatch = int(self.n_users / self.batch_size) + 1
 
         cdef long start_time_epoch = time.time()
         cdef long start_time_batch = time.time()
@@ -351,7 +357,7 @@ cdef class SLIM_BPR_Cython_Epoch:
             if self.verbose and ((numCurrentBatch%printStep==0 and not numCurrentBatch==0) or numCurrentBatch==totalNumberOfBatch-1):
                 print("Processed {} ( {:.2f}% ) in {:.2f} seconds. BPR loss is {:.2E}. Sample per second: {:.0f}".format(
                     numCurrentBatch*self.batch_size,
-                    100.0* float(numCurrentBatch*self.batch_size)/self.numPositiveIteractions,
+                    100.0* float(numCurrentBatch*self.batch_size)/self.n_users,
                     time.time() - start_time_batch,
                     loss/(numCurrentBatch*self.batch_size + 1),
                     float(numCurrentBatch*self.batch_size + 1) / (time.time() - start_time_epoch)))
@@ -424,43 +430,45 @@ cdef class SLIM_BPR_Cython_Epoch:
 
         cdef long index
 
-        cdef int negItemSelected, numSeenItems = 0
+        cdef int neg_item_selected, n_seen_items = 0
 
 
         # Skip users with no interactions or with no negative items
-        while numSeenItems == 0 or numSeenItems == self.n_items:
+        while n_seen_items == 0 or n_seen_items == self.n_items:
 
             sample.user = rand() % self.n_users
 
             sample.seen_items_start_pos = self.URM_mask_indptr[sample.user]
             sample.seen_items_end_pos = self.URM_mask_indptr[sample.user + 1]
 
-            numSeenItems = sample.seen_items_end_pos - sample.seen_items_start_pos
+            n_seen_items = sample.seen_items_end_pos - sample.seen_items_start_pos
 
 
-        index = rand() % numSeenItems
+        index = rand() % n_seen_items
 
         sample.pos_item = self.URM_mask_indices[sample.seen_items_start_pos + index]
 
 
-        negItemSelected = False
+        neg_item_selected = False
 
         # It's faster to just try again then to build a mapping of the non-seen items
         # for every user
-        while (not negItemSelected):
+        while not neg_item_selected:
 
             sample.neg_item = rand() % self.n_items
 
             index = 0
-            while index < numSeenItems and self.URM_mask_indices[sample.seen_items_start_pos + index]!=sample.neg_item:
+            # Indices data is sorted, so I don't need to go to the end of the current row
+            while index < n_seen_items and self.URM_mask_indices[sample.seen_items_start_pos + index] < sample.neg_item:
                 index+=1
 
-            if index == numSeenItems:
-                negItemSelected = True
+            # If the positive item in position 'index' is == sample.neg_item, negative not selected
+            # If the positive item in position 'index' is > sample.neg_item or index == n_seen_items, negative selected
+            if index == n_seen_items or self.URM_mask_indices[sample.seen_items_start_pos + index] > sample.neg_item:
+                neg_item_selected = True
 
 
         return sample
-
 
 
 
@@ -553,6 +561,12 @@ cdef int compare_struct_on_data(const void * a_input, const void * b_input):
 #################################       CLASS DECLARATION
 #################################
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.initializedcheck(False)
+@cython.nonecheck(False)
+@cython.cdivision(True)
+@cython.overflowcheck(False)
 cdef class Sparse_Matrix_Tree_CSR:
 
     cdef long num_rows, num_cols
@@ -593,7 +607,7 @@ cdef class Sparse_Matrix_Tree_CSR:
 
 
 
-    cpdef double add_value(self, long row, long col, double value):
+    cdef double add_value(self, long row, long col, double value):
         """
         The function adds a value to the specified cell. A new cell is created if necessary.         
         
@@ -663,7 +677,7 @@ cdef class Sparse_Matrix_Tree_CSR:
 
 
 
-    cpdef double get_value(self, long row, long col):
+    cdef double get_value(self, long row, long col):
         """
         The function returns the value of the specified cell.         
         
@@ -715,7 +729,7 @@ cdef class Sparse_Matrix_Tree_CSR:
 
 
 
-    cpdef get_scipy_csr(self, long TopK = False):
+    cdef get_scipy_csr(self, long TopK = False):
         """
         The function returns the current sparse matrix as a scipy_csr object         
    
@@ -760,7 +774,7 @@ cdef class Sparse_Matrix_Tree_CSR:
 
 
 
-    cpdef rebalance_tree(self, long TopK = False):
+    cdef rebalance_tree(self, long TopK = False):
         """
         The function builds a balanced binary tree from the current one, for all matrix rows
         
@@ -801,7 +815,7 @@ cdef class Sparse_Matrix_Tree_CSR:
 
     cdef matrix_element_tree_s * subtree_to_list_flat(self, matrix_element_tree_s * root):
         """
-        The function flatten the structure of the subtree whose root is passed as a paramether    
+        The function flatten the structure of the subtree whose root is passed as a parameter    
         The list is bidirectional and ordered with respect to the column
         The column ordering follows from the insertion policy
         
@@ -1211,6 +1225,12 @@ from cpython.array cimport array, clone
 #################################       CLASS DECLARATION
 #################################
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.initializedcheck(False)
+@cython.nonecheck(False)
+@cython.cdivision(True)
+@cython.overflowcheck(False)
 cdef class Triangular_Matrix:
 
     cdef long num_rows, num_cols
@@ -1260,7 +1280,7 @@ cdef class Triangular_Matrix:
 
 
 
-    cpdef double add_value(self, long row, long col, double value):
+    cdef double add_value(self, long row, long col, double value):
         """
         The function adds a value to the specified cell. A new cell is created if necessary.         
         
@@ -1294,7 +1314,7 @@ cdef class Triangular_Matrix:
 
 
 
-    cpdef double get_value(self, long row, long col):
+    cdef double get_value(self, long row, long col):
         """
         The function returns the value of the specified cell.         
         
@@ -1323,7 +1343,7 @@ cdef class Triangular_Matrix:
 
 
 
-    cpdef get_scipy_csr(self, long TopK = False):
+    cdef get_scipy_csr(self, long TopK = False):
         """
         The function returns the current sparse matrix as a scipy_csr object         
    

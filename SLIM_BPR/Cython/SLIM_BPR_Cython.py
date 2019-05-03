@@ -54,7 +54,6 @@ class SLIM_BPR_Cython(BaseSimilarityMatrixRecommender, Incremental_Training_Earl
 
     def __init__(self, URM_train,
                  free_mem_threshold = 0.5,
-
                  recompile_cython = False):
 
 
@@ -80,6 +79,7 @@ class SLIM_BPR_Cython(BaseSimilarityMatrixRecommender, Incremental_Training_Earl
             train_with_sparse_weights = None,
             symmetric = True,
             verbose = False,
+            random_seed = None,
             batch_size = 1000, lambda_i = 0.0, lambda_j = 0.0, learning_rate = 1e-4, topK = 200,
             sgd_mode='adagrad', gamma=0.995, beta_1=0.9, beta_2=0.999,
             **earlystopping_kwargs):
@@ -141,6 +141,7 @@ class SLIM_BPR_Cython(BaseSimilarityMatrixRecommender, Incremental_Training_Earl
                                                  symmetric = self.symmetric,
                                                  sgd_mode = sgd_mode,
                                                  verbose = verbose,
+                                                 random_seed = random_seed,
                                                  gamma=gamma,
                                                  beta_1=beta_1,
                                                  beta_2=beta_2)

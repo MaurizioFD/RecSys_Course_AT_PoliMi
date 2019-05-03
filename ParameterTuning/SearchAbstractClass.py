@@ -8,11 +8,11 @@ Created on 10/03/2018
 
 
 
-class SearchInputRecommenderParameters(object):
+class SearchInputRecommenderArgs(object):
 
 
     def __init__(self,
-                   # Dictionary of paramethers needed by the constructor
+                   # Dictionary of parameters needed by the constructor
                    CONSTRUCTOR_POSITIONAL_ARGS = None,
                    CONSTRUCTOR_KEYWORD_ARGS = None,
 
@@ -22,7 +22,7 @@ class SearchInputRecommenderParameters(object):
                    ):
 
 
-          super(SearchInputRecommenderParameters, self).__init__()
+          super(SearchInputRecommenderArgs, self).__init__()
 
           if CONSTRUCTOR_POSITIONAL_ARGS is None:
               CONSTRUCTOR_POSITIONAL_ARGS = []
@@ -54,9 +54,18 @@ class SearchInputRecommenderParameters(object):
 
 
 
+    def copy(self):
 
 
+        clone_object = SearchInputRecommenderArgs(
+                            CONSTRUCTOR_POSITIONAL_ARGS = self.CONSTRUCTOR_POSITIONAL_ARGS.copy(),
+                            CONSTRUCTOR_KEYWORD_ARGS = self.CONSTRUCTOR_KEYWORD_ARGS.copy(),
+                            FIT_POSITIONAL_ARGS = self.FIT_POSITIONAL_ARGS.copy(),
+                            FIT_KEYWORD_ARGS = self.FIT_KEYWORD_ARGS.copy()
+                            )
 
+
+        return clone_object
 
 
 
@@ -79,6 +88,17 @@ def writeLog(string, logFile):
 
 
 
+def get_result_string_evaluate_on_validation(results_run_single_cutoff, n_decimals=7):
+
+    output_str = ""
+
+    for metric in results_run_single_cutoff.keys():
+        output_str += "{}: {:.{n_decimals}f}, ".format(metric, results_run_single_cutoff[metric], n_decimals = n_decimals)
+
+    return output_str
+
+
+
 class SearchAbstractClass(object):
 
     ALGORITHM_NAME = "SearchAbstractClass"
@@ -93,7 +113,7 @@ class SearchAbstractClass(object):
         self.recommender_class = recommender_class
 
         self.results_test_best = {}
-        self.paramether_dictionary_best = {}
+        self.parameter_dictionary_best = {}
 
         if evaluator_validation is None:
             raise ValueError("{}: evaluator_validation must be provided".format(self.ALGORITHM_NAME))
