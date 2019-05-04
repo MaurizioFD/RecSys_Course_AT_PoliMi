@@ -137,7 +137,6 @@ cdef class MatrixFactorization_Cython_Epoch:
         self.URM_train_data = np.array(URM_train.data, dtype=np.float64)
         self.URM_train_indptr = URM_train.indptr
 
-
         if random_seed is not None:
             np.random.seed(seed=random_seed)
             srand(<unsigned int> int(random_seed))

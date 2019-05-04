@@ -27,7 +27,6 @@ class BaseSimilarityMatrixRecommender(BaseRecommender):
         self._W_sparse_format_checked = False
 
 
-
     def _compute_score_item_based(self, user_id_array, items_to_compute = None):
         """
         URM_train and W_sparse must have the same format, CSR

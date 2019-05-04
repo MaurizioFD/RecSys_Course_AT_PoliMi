@@ -32,20 +32,15 @@ def json_not_serializable_handler(o):
 class DataIO(object):
     """ DataIO"""
 
-    _DEFAULT_TEMP_FOLDER = "__temp_DataIO_extract_folder/"
+    _DEFAULT_TEMP_FOLDER = "__temp_DataIO_"
 
     # _MAX_PATH_LENGTH_LINUX = 4096
     _MAX_PATH_LENGTH_WINDOWS = 255
 
-    def __init__(self, folder_path, ):
+    def __init__(self, folder_path):
         super(DataIO, self).__init__()
 
         self._is_windows = platform.system() == "Windows"
-
-        # if self._is_windows:
-        #     self._max_path_lentgth = self._MAX_PATH_LENGTH_WINDOWS
-        # else:
-        #     self._max_path_lentgth = self._MAX_PATH_LENGTH_LINUX
 
         self.folder_path = folder_path
         self._key_string_alert_done = False
@@ -58,13 +53,16 @@ class DataIO(object):
         print("{}: {}".format("DataIO", message))
 
 
-    def _get_temp_folder(self):
+    def _get_temp_folder(self, file_name):
         """
         Creates a temporary folder to be used during the data saving
         :return:
         """
 
-        current_temp_folder = self.folder_path + self._DEFAULT_TEMP_FOLDER
+        # Ignore the .zip extension
+        file_name = file_name[:-4]
+
+        current_temp_folder = "{}{}_{}".format(self.folder_path, self._DEFAULT_TEMP_FOLDER, file_name)
 
         if os.path.exists(current_temp_folder):
             self._print("Folder {} already exists, could be the result of a previous failed save attempt or multiple saver are active in parallel. " \
@@ -112,8 +110,7 @@ class DataIO(object):
             file_name += ".zip"
 
 
-
-        current_temp_folder = self._get_temp_folder()
+        current_temp_folder = self._get_temp_folder(file_name)
 
 
         attribute_to_type_dict = {}
@@ -198,7 +195,7 @@ class DataIO(object):
 
         dataFile.testzip()
 
-        current_temp_folder = self._get_temp_folder()
+        current_temp_folder = self._get_temp_folder(file_name)
 
         attribute_to_type_dict_path = dataFile.extract("__DataIO_attribute_to_type_dict.json", path = current_temp_folder)
         attribute_to_file_name_path = dataFile.extract("__DataIO_attribute_to_file_name.json", path = current_temp_folder)
