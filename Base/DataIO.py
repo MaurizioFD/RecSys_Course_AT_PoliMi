@@ -62,7 +62,7 @@ class DataIO(object):
         # Ignore the .zip extension
         file_name = file_name[:-4]
 
-        current_temp_folder = "{}{}_{}".format(self.folder_path, self._DEFAULT_TEMP_FOLDER, file_name)
+        current_temp_folder = "{}{}_{}/".format(self.folder_path, self._DEFAULT_TEMP_FOLDER, file_name)
 
         if os.path.exists(current_temp_folder):
             self._print("Folder {} already exists, could be the result of a previous failed save attempt or multiple saver are active in parallel. " \
