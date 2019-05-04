@@ -138,12 +138,13 @@ cdef class MatrixFactorization_Cython_Epoch:
         self.URM_train_indptr = URM_train.indptr
 
 
+        if random_seed is not None:
+            np.random.seed(seed=random_seed)
+            srand(<unsigned int> int(random_seed))
+
         self._init_latent_factors()
 
         self._init_adaptive_gradient_cache(sgd_mode, gamma, beta_1, beta_2)
-
-        if random_seed is not None:
-            srand(<unsigned> random_seed)
 
 
 
