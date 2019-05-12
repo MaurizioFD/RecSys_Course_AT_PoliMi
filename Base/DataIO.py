@@ -197,42 +197,49 @@ class DataIO(object):
 
         current_temp_folder = self._get_temp_folder(file_name)
 
-        attribute_to_type_dict_path = dataFile.extract("__DataIO_attribute_to_type_dict.json", path = current_temp_folder)
-        attribute_to_file_name_path = dataFile.extract("__DataIO_attribute_to_file_name.json", path = current_temp_folder)
+        try:
 
-        with open(attribute_to_type_dict_path, "r") as json_file:
-            attribute_to_type_dict = json.load(json_file)
+            attribute_to_type_dict_path = dataFile.extract("__DataIO_attribute_to_type_dict.json", path = current_temp_folder)
+            attribute_to_file_name_path = dataFile.extract("__DataIO_attribute_to_file_name.json", path = current_temp_folder)
 
-        with open(attribute_to_file_name_path, "r") as json_file:
-            attribute_to_file_name = json.load(json_file)
+            with open(attribute_to_type_dict_path, "r") as json_file:
+                attribute_to_type_dict = json.load(json_file)
 
-        data_dict_loaded = {}
+            with open(attribute_to_file_name_path, "r") as json_file:
+                attribute_to_file_name = json.load(json_file)
 
-        for attrib_name, file_name in attribute_to_file_name.items():
+            data_dict_loaded = {}
 
-            attrib_file_path = dataFile.extract(file_name, path = current_temp_folder)
-            attrib_data_type = attribute_to_type_dict[attrib_name]
+            for attrib_name, file_name in attribute_to_file_name.items():
+
+                attrib_file_path = dataFile.extract(file_name, path = current_temp_folder)
+                attrib_data_type = attribute_to_type_dict[attrib_name]
 
 
-            if attrib_data_type == "DataFrame":
-                attrib_data = pd.read_csv(attrib_file_path, index_col=False)
+                if attrib_data_type == "DataFrame":
+                    attrib_data = pd.read_csv(attrib_file_path, index_col=False)
 
-            elif attrib_data_type == "sps.spmatrix":
-                attrib_data = sps.load_npz(attrib_file_path)
+                elif attrib_data_type == "sps.spmatrix":
+                    attrib_data = sps.load_npz(attrib_file_path)
 
-            elif attrib_data_type == "np.ndarray":
-                # allow_pickle is FALSE to prevent using pickle and ensure portability
-                attrib_data = np.load(attrib_file_path, allow_pickle=False)
+                elif attrib_data_type == "np.ndarray":
+                    # allow_pickle is FALSE to prevent using pickle and ensure portability
+                    attrib_data = np.load(attrib_file_path, allow_pickle=False)
 
-            elif attrib_data_type == "json":
-                with open(attrib_file_path, "r") as json_file:
-                    attrib_data = json.load(json_file)
+                elif attrib_data_type == "json":
+                    with open(attrib_file_path, "r") as json_file:
+                        attrib_data = json.load(json_file)
 
-            else:
-                raise Exception("Attribute type not recognized for: '{}' of class: '{}'".format(attrib_file_path, attrib_data_type))
+                else:
+                    raise Exception("Attribute type not recognized for: '{}' of class: '{}'".format(attrib_file_path, attrib_data_type))
 
-            data_dict_loaded[attrib_name] = attrib_data
+                data_dict_loaded[attrib_name] = attrib_data
 
+
+        except Exception as exec:
+
+            shutil.rmtree(current_temp_folder, ignore_errors=True)
+            raise exec
 
         shutil.rmtree(current_temp_folder, ignore_errors=True)
 

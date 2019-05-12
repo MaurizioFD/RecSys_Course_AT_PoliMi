@@ -91,60 +91,6 @@ class BaseMatrixFactorizationRecommender(BaseRecommender):
 
 
 
-    def _compute_item_score(self, user_id_array, items_to_compute = None):
-        """
-        USER_factors is n_users x n_factors
-        ITEM_factors is n_items x n_factors
-
-        The prediction for cold users will always be -inf for ALL items
-
-        :param user_id_array:
-        :param items_to_compute:
-        :return:
-        """
-
-        assert self.USER_factors.shape[1] == self.ITEM_factors.shape[1], \
-            "{}: User and Item factors have inconsistent shape".format(self.RECOMMENDER_NAME)
-
-        assert self.USER_factors.shape[0] > user_id_array.max(),\
-                "{}: Cold users not allowed. Users in trained model are {}, requested prediction for users up to {}".format(
-                self.RECOMMENDER_NAME, self.USER_factors.shape[0], user_id_array.max())
-
-        if items_to_compute is not None:
-            item_scores = - np.ones((len(user_id_array), self.ITEM_factors.shape[0]), dtype=np.float32)*np.inf
-            item_scores[:, items_to_compute] = np.dot(self.USER_factors[user_id_array], self.ITEM_factors[items_to_compute,:].T)
-
-        else:
-            item_scores = np.dot(self.USER_factors[user_id_array], self.ITEM_factors.T)
-
-
-        # No need to select only the specific negative items or warm users because the -inf score will not change
-        if self.use_bias:
-            item_scores += self.ITEM_bias + self.GLOBAL_bias
-            item_scores = (item_scores.T + self.USER_bias[user_id_array]).T
-
-
-        cold_users_MF_mask = self._get_cold_user_mask()[user_id_array]
-
-        if cold_users_MF_mask.any():
-
-            if self._cold_user_KNN_model_available:
-                # Add KNN scores for users cold for MF but warm in KNN model
-                cold_users_in_MF_warm_in_KNN_mask = np.logical_and(cold_users_MF_mask, self._warm_user_KNN_mask[user_id_array])
-
-                item_scores[cold_users_in_MF_warm_in_KNN_mask, :] = self._ItemKNNRecommender._compute_item_score(user_id_array[cold_users_in_MF_warm_in_KNN_mask], items_to_compute=items_to_compute)
-
-                # Set cold users as those neither in MF nor in KNN
-                cold_users_MF_mask = np.logical_and(cold_users_MF_mask, np.logical_not(cold_users_in_MF_warm_in_KNN_mask))
-
-            # Set as -inf all remaining cold user scores
-            item_scores[cold_users_MF_mask, :] = - np.ones_like(item_scores[cold_users_MF_mask, :]) * np.inf
-
-        return item_scores
-
-
-
-
     def set_URM_train(self, URM_train_new, estimate_model_for_cold_users = False, topK = 100, **kwargs):
         """
 
@@ -198,6 +144,90 @@ class BaseMatrixFactorizationRecommender(BaseRecommender):
                     self.USER_factors[user_index, :] /= profile_length_sqrt[user_index]
 
             print("{}: Estimating USER latent factors from ITEM latent factors... done!".format(self.RECOMMENDER_NAME))
+
+
+
+    #########################################################################################################
+    ##########                                                                                     ##########
+    ##########                               COMPUTE ITEM SCORES                                   ##########
+    ##########                                                                                     ##########
+    #########################################################################################################
+
+
+    def _compute_item_score(self, user_id_array, items_to_compute = None):
+        """
+        USER_factors is n_users x n_factors
+        ITEM_factors is n_items x n_factors
+
+        The prediction for cold users will always be -inf for ALL items
+
+        :param user_id_array:
+        :param items_to_compute:
+        :return:
+        """
+
+        assert self.USER_factors.shape[1] == self.ITEM_factors.shape[1], \
+            "{}: User and Item factors have inconsistent shape".format(self.RECOMMENDER_NAME)
+
+        assert self.USER_factors.shape[0] > user_id_array.max(),\
+                "{}: Cold users not allowed. Users in trained model are {}, requested prediction for users up to {}".format(
+                self.RECOMMENDER_NAME, self.USER_factors.shape[0], user_id_array.max())
+
+        if items_to_compute is not None:
+            item_scores = - np.ones((len(user_id_array), self.ITEM_factors.shape[0]), dtype=np.float32)*np.inf
+            item_scores[:, items_to_compute] = np.dot(self.USER_factors[user_id_array], self.ITEM_factors[items_to_compute,:].T)
+
+        else:
+            item_scores = np.dot(self.USER_factors[user_id_array], self.ITEM_factors.T)
+
+
+        # No need to select only the specific negative items or warm users because the -inf score will not change
+        if self.use_bias:
+            item_scores += self.ITEM_bias + self.GLOBAL_bias
+            item_scores = (item_scores.T + self.USER_bias[user_id_array]).T
+
+
+        item_scores = self._compute_item_score_postprocess_for_cold_users(user_id_array, item_scores)
+        item_scores = self._compute_item_score_postprocess_for_cold_items(item_scores)
+
+        return item_scores
+
+
+    def _compute_item_score_postprocess_for_cold_users(self, user_id_array, item_scores):
+        """
+        Remove cold users from the computed item scores, setting them to -inf
+        Or estimate user factors with specified method
+        :param user_id_array:
+        :param item_scores:
+        :return:
+        """
+
+        cold_users_batch_mask = self._get_cold_user_mask()[user_id_array]
+
+        # Set as -inf all cold user scores
+        if cold_users_batch_mask.any():
+
+            if self._cold_user_KNN_model_available:
+                # Add KNN scores for users cold for MF but warm in KNN model
+                cold_users_in_MF_warm_in_KNN_mask = np.logical_and(cold_users_batch_mask, self._warm_user_KNN_mask[user_id_array])
+
+                item_scores[cold_users_in_MF_warm_in_KNN_mask, :] = self._ItemKNNRecommender._compute_item_score(user_id_array[cold_users_in_MF_warm_in_KNN_mask], items_to_compute=items_to_compute)
+
+                # Set cold users as those neither in MF nor in KNN
+                cold_users_batch_mask = np.logical_and(cold_users_batch_mask, np.logical_not(cold_users_in_MF_warm_in_KNN_mask))
+
+            # Set as -inf all remaining cold user scores
+            item_scores[cold_users_batch_mask, :] = - np.ones_like(item_scores[cold_users_batch_mask, :]) * np.inf
+
+        return item_scores
+
+
+
+    #########################################################################################################
+    ##########                                                                                     ##########
+    ##########                                LOAD AND SAVE                                        ##########
+    ##########                                                                                     ##########
+    #########################################################################################################
 
 
 

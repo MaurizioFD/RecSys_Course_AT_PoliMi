@@ -22,14 +22,14 @@ class PureSVDRecommender(BaseMatrixFactorizationRecommender):
         super(PureSVDRecommender, self).__init__(URM_train)
 
 
-    def fit(self, num_factors=100):
+    def fit(self, num_factors=100, random_seed = None):
 
         print(self.RECOMMENDER_NAME + " Computing SVD decomposition...")
 
         U, Sigma, VT = randomized_svd(self.URM_train,
                                       n_components=num_factors,
                                       #n_iter=5,
-                                      random_state=None)
+                                      random_state = random_seed)
 
         s_Vt = sps.diags(Sigma)*VT
 

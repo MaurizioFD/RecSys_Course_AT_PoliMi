@@ -27,12 +27,6 @@ class ItemKNNCFRecommender(BaseSimilarityMatrixRecommender):
     def __init__(self, URM_train):
         super(ItemKNNCFRecommender, self).__init__(URM_train)
 
-        cold_items_mask = np.ediff1d(self.URM_train.tocsc().indptr) == 0
-
-        if cold_items_mask.any():
-            print("{}: Detected {} ({:.2f} %) cold items.".format(
-                self.RECOMMENDER_NAME, cold_items_mask.sum(), cold_items_mask.sum()/len(cold_items_mask)*100))
-
 
     def fit(self, topK=50, shrink=100, similarity='cosine', normalize=True, feature_weighting = "none", **similarity_args):
 

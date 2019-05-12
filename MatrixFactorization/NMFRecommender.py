@@ -38,7 +38,8 @@ class NMFRecommender(BaseMatrixFactorizationRecommender):
             solver = "multiplicative_update",
             init_type = "random",
             beta_loss = "frobenius",
-            verbose = False):
+            verbose = False,
+            random_seed = None):
 
 
         assert l1_ratio>= 0 and l1_ratio<=1, "{}: l1_ratio must be between 0 and 1, provided value was {}".format(self.RECOMMENDER_NAME, l1_ratio)
@@ -58,7 +59,7 @@ class NMFRecommender(BaseMatrixFactorizationRecommender):
                          init = init_type,
                          solver = self.SOLVER_VALUES[solver],
                          beta_loss = beta_loss,
-                         random_state = None,
+                         random_state = random_seed,
                          l1_ratio = l1_ratio,
                          shuffle = True,
                          verbose = verbose,

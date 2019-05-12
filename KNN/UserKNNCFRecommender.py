@@ -28,12 +28,16 @@ class UserKNNCFRecommender(BaseSimilarityMatrixRecommender):
 
         self._compute_item_score = self._compute_score_user_based
 
-        cold_user_mask = np.ediff1d(self.URM_train.indptr) == 0
 
-        if cold_user_mask.any():
-            print("{}: Detected {} ({:.2f} %) cold users.".format(
-                self.RECOMMENDER_NAME, cold_user_mask.sum(), cold_user_mask.sum()/len(cold_user_mask)*100))
+    def _compute_item_score_postprocess_for_cold_users(self, user_id_array, item_scores):
+        """
+        Remove cold users from the computed item scores, setting them to -inf
+        :param user_id_array:
+        :param item_scores:
+        :return:
+        """
 
+        return item_scores
 
 
     def fit(self, topK=50, shrink=100, similarity='cosine', normalize=True, feature_weighting = "none", **similarity_args):

@@ -27,6 +27,13 @@ class BaseSimilarityMatrixRecommender(BaseRecommender):
         self._W_sparse_format_checked = False
 
 
+    #########################################################################################################
+    ##########                                                                                     ##########
+    ##########                               COMPUTE ITEM SCORES                                   ##########
+    ##########                                                                                     ##########
+    #########################################################################################################
+
+
     def _compute_score_item_based(self, user_id_array, items_to_compute = None):
         """
         URM_train and W_sparse must have the same format, CSR
@@ -46,10 +53,9 @@ class BaseSimilarityMatrixRecommender(BaseRecommender):
         else:
             item_scores = user_profile_array.dot(self.W_sparse).toarray()
 
-        # Set as -inf all cold user scores
-        if self._get_cold_user_mask().any():
-            cold_users_batch_mask = self._get_cold_user_mask()[user_id_array]
-            item_scores[cold_users_batch_mask, :] = - np.ones_like(item_scores[cold_users_batch_mask, :]) * np.inf
+
+        item_scores = self._compute_item_score_postprocess_for_cold_users(user_id_array, item_scores)
+        item_scores = self._compute_item_score_postprocess_for_cold_items(item_scores)
 
         return item_scores
 
@@ -73,10 +79,8 @@ class BaseSimilarityMatrixRecommender(BaseRecommender):
         else:
             item_scores = user_weights_array.dot(self.URM_train).toarray()
 
-        # Set as -inf all cold user scores
-        if self._get_cold_user_mask().any():
-            cold_users_batch_mask = self._get_cold_user_mask()[user_id_array]
-            item_scores[cold_users_batch_mask, :] = - np.ones_like(item_scores[cold_users_batch_mask, :]) * np.inf
+        item_scores = self._compute_item_score_postprocess_for_cold_users(user_id_array, item_scores)
+        item_scores = self._compute_item_score_postprocess_for_cold_items(item_scores)
 
         return item_scores
 
@@ -96,6 +100,14 @@ class BaseSimilarityMatrixRecommender(BaseRecommender):
                 print("PERFORMANCE ALERT compute_item_score: {} is not {}, this will significantly slow down the computation.".format("W_sparse", "csr"))
 
             self._W_sparse_format_checked = True
+
+
+
+    #########################################################################################################
+    ##########                                                                                     ##########
+    ##########                                LOAD AND SAVE                                        ##########
+    ##########                                                                                     ##########
+    #########################################################################################################
 
 
     def saveModel(self, folder_path, file_name = None):

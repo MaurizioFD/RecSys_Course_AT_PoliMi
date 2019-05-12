@@ -27,6 +27,16 @@ class ItemKNNCBFRecommender(BaseSimilarityMatrixRecommender):
         self.ICM = ICM.copy()
 
 
+    def _compute_item_score_postprocess_for_cold_items(self, item_scores):
+        """
+        In CBF no cold items are to be removed
+        :param item_scores:
+        :return:
+        """
+
+        return item_scores
+
+
     def fit(self, topK=50, shrink=100, similarity='cosine', normalize=True, feature_weighting = "none", **similarity_args):
 
         self.topK = topK

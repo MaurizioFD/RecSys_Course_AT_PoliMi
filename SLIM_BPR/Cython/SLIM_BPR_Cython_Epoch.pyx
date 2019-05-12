@@ -132,18 +132,22 @@ cdef class SLIM_BPR_Cython_Epoch:
             srand(<unsigned> random_seed)
 
 
+        self._init_adaptive_gradient_cache(sgd_mode, gamma, beta_1, beta_2)
+
+
+
+
+    def _init_adaptive_gradient_cache(self, sgd_mode, gamma, beta_1, beta_2):
+
         self.useAdaGrad = False
         self.useRmsprop = False
         self.useAdam = False
 
-
         if sgd_mode=='adagrad':
             self.useAdaGrad = True
-            self.sgd_cache_I = np.zeros((self.n_items), dtype=np.float64)
 
         elif sgd_mode=='rmsprop':
             self.useRmsprop = True
-            self.sgd_cache_I = np.zeros((self.n_items), dtype=np.float64)
 
             # Gamma default value suggested by Hinton
             # self.gamma = 0.9
@@ -151,8 +155,6 @@ cdef class SLIM_BPR_Cython_Epoch:
 
         elif sgd_mode=='adam':
             self.useAdam = True
-            self.sgd_cache_I_momentum_1 = np.zeros((self.n_items), dtype=np.float64)
-            self.sgd_cache_I_momentum_2 = np.zeros((self.n_items), dtype=np.float64)
 
             # Default value suggested by the original paper
             # beta_1=0.9, beta_2=0.999
@@ -161,12 +163,24 @@ cdef class SLIM_BPR_Cython_Epoch:
             self.beta_1_power_t = beta_1
             self.beta_2_power_t = beta_2
 
-        elif sgd_mode=='sgd':
-            pass
+
+
+        if sgd_mode=='sgd':
+            self.sgd_cache_I = None
+
+            self.sgd_cache_I_momentum_1 = None
+            self.sgd_cache_I_momentum_2 = None
+
         else:
-            raise ValueError(
-                "SGD_mode not valid. Acceptable values are: 'sgd', 'adagrad', 'rmsprop', 'adam'. Provided value was '{}'".format(
-                    sgd_mode))
+
+            # Adagrad and RMSProp
+            self.sgd_cache_I = np.zeros((self.n_items), dtype=np.float64)
+
+            # Adam
+            self.sgd_cache_I_momentum_1 = np.zeros((self.n_items), dtype=np.float64)
+            self.sgd_cache_I_momentum_2 = np.zeros((self.n_items), dtype=np.float64)
+
+
 
 
     def __dealloc__(self):
@@ -207,7 +221,7 @@ cdef class SLIM_BPR_Cython_Epoch:
         cdef long i, j
         cdef long index, seenItem, numCurrentBatch, itemId
         cdef double x_uij, gradient, loss = 0.0
-        cdef double gradient_update
+        cdef double local_gradient_i, local_gradient_j
 
         cdef int numSeenItems
         cdef int printStep
@@ -250,52 +264,8 @@ cdef class SLIM_BPR_Cython_Epoch:
             loss += x_uij**2
 
 
-            if self.useAdaGrad:
-                self.sgd_cache_I[i] += gradient ** 2
-                self.sgd_cache_I[j] += gradient ** 2
-
-                gradient_update = gradient / (sqrt(self.sgd_cache_I[i]) + 1e-8)
-
-
-            elif self.useRmsprop:
-                self.sgd_cache_I[i] = self.sgd_cache_I[i] * self.gamma + (1 - self.gamma) * gradient ** 2
-                self.sgd_cache_I[j] = self.sgd_cache_I[j] * self.gamma + (1 - self.gamma) * gradient ** 2
-
-                gradient_update = gradient / (sqrt(self.sgd_cache_I[i]) + 1e-8)
-
-
-            elif self.useAdam:
-
-                self.sgd_cache_I_momentum_1[i] = \
-                    self.sgd_cache_I_momentum_1[i] * self.beta_1 + (1 - self.beta_1) * gradient
-
-                self.sgd_cache_I_momentum_2[i] = \
-                    self.sgd_cache_I_momentum_2[i] * self.beta_2 + (1 - self.beta_2) * gradient**2
-
-
-                self.momentum_1 = self.sgd_cache_I_momentum_1[i]/ (1 - self.beta_1_power_t)
-                self.momentum_2 = self.sgd_cache_I_momentum_2[i]/ (1 - self.beta_2_power_t)
-
-                gradient_update = self.momentum_1/ (sqrt(self.momentum_2) + 1e-8)
-
-
-
-
-                self.sgd_cache_I_momentum_1[j] = \
-                    self.sgd_cache_I_momentum_1[j] * self.beta_1 + (1 - self.beta_1) * gradient
-
-                self.sgd_cache_I_momentum_2[j] = \
-                    self.sgd_cache_I_momentum_2[j] * self.beta_2 + (1 - self.beta_2) * gradient**2
-
-
-            else:
-
-                gradient_update = gradient
-
-
-
-
-
+            local_gradient_i = self.adaptive_gradient(gradient, i, self.sgd_cache_I, self.sgd_cache_I_momentum_1, self.sgd_cache_I_momentum_2)
+            local_gradient_j = self.adaptive_gradient(gradient, j, self.sgd_cache_I, self.sgd_cache_I_momentum_1, self.sgd_cache_I_momentum_2)
 
 
             index = 0
@@ -310,33 +280,33 @@ cdef class SLIM_BPR_Cython_Epoch:
 
                     if seenItem != i:
                         if self.li_reg!= 0.0:
-                            self.S_sparse.add_value(i, seenItem, self.learning_rate * (gradient_update - self.li_reg * self.S_sparse.get_value(i, seenItem)))
+                            self.S_sparse.add_value(i, seenItem, self.learning_rate * (local_gradient_i - self.li_reg * self.S_sparse.get_value(i, seenItem)))
                         else:
-                            self.S_sparse.add_value(i, seenItem, self.learning_rate * gradient_update)
+                            self.S_sparse.add_value(i, seenItem, self.learning_rate * local_gradient_i)
 
 
                     if seenItem != j:
                         if self.lj_reg!= 0.0:
-                            self.S_sparse.add_value(j, seenItem, -self.learning_rate * (gradient_update - self.lj_reg * self.S_sparse.get_value(j, seenItem)))
+                            self.S_sparse.add_value(j, seenItem, -self.learning_rate * (local_gradient_j - self.lj_reg * self.S_sparse.get_value(j, seenItem)))
                         else:
-                            self.S_sparse.add_value(j, seenItem, -self.learning_rate * gradient_update)
+                            self.S_sparse.add_value(j, seenItem, -self.learning_rate * local_gradient_j)
 
 
                 elif self.symmetric:
 
                     if seenItem != i:
-                        self.S_symmetric.add_value(i, seenItem, self.learning_rate * (gradient_update - self.li_reg * self.S_symmetric.get_value(i, seenItem)))
+                        self.S_symmetric.add_value(i, seenItem, self.learning_rate * (local_gradient_i - self.li_reg * self.S_symmetric.get_value(i, seenItem)))
 
                     if seenItem != j:
-                        self.S_symmetric.add_value(j, seenItem, -self.learning_rate * (gradient_update - self.lj_reg * self.S_symmetric.get_value(j, seenItem)))
+                        self.S_symmetric.add_value(j, seenItem, -self.learning_rate * (local_gradient_j - self.lj_reg * self.S_symmetric.get_value(j, seenItem)))
 
                 else:
 
                     if seenItem != i:
-                        self.S_dense[i, seenItem] += self.learning_rate * (gradient_update - self.li_reg * self.S_dense[i, seenItem])
+                        self.S_dense[i, seenItem] += self.learning_rate * (local_gradient_i - self.li_reg * self.S_dense[i, seenItem])
 
                     if seenItem != j:
-                        self.S_dense[j, seenItem] -= self.learning_rate * (gradient_update - self.lj_reg * self.S_dense[j, seenItem])
+                        self.S_dense[j, seenItem] -= self.learning_rate * (local_gradient_j - self.lj_reg * self.S_dense[j, seenItem])
 
 
 
@@ -422,6 +392,48 @@ cdef class SLIM_BPR_Cython_Epoch:
 
 
 
+
+
+
+    cdef double adaptive_gradient(self, double gradient, long user_or_item_id, double[:] sgd_cache, double[:] sgd_cache_momentum_1, double[:] sgd_cache_momentum_2):
+
+
+        cdef double gradient_update
+
+        if self.useAdaGrad:
+            sgd_cache[user_or_item_id] += gradient ** 2
+
+            gradient_update = gradient / (sqrt(sgd_cache[user_or_item_id]) + 1e-8)
+
+
+        elif self.useRmsprop:
+            sgd_cache[user_or_item_id] = sgd_cache[user_or_item_id] * self.gamma + (1 - self.gamma) * gradient ** 2
+
+            gradient_update = gradient / (sqrt(sgd_cache[user_or_item_id]) + 1e-8)
+
+
+        elif self.useAdam:
+
+            sgd_cache_momentum_1[user_or_item_id] = \
+                sgd_cache_momentum_1[user_or_item_id] * self.beta_1 + (1 - self.beta_1) * gradient
+
+            sgd_cache_momentum_2[user_or_item_id] = \
+                sgd_cache_momentum_2[user_or_item_id] * self.beta_2 + (1 - self.beta_2) * gradient**2
+
+
+            self.momentum_1 = sgd_cache_momentum_1[user_or_item_id]/ (1 - self.beta_1_power_t)
+            self.momentum_2 = sgd_cache_momentum_2[user_or_item_id]/ (1 - self.beta_2_power_t)
+
+            gradient_update = self.momentum_1/ (sqrt(self.momentum_2) + 1e-8)
+
+
+        else:
+
+            gradient_update = gradient
+
+
+
+        return gradient_update
 
 
     cdef BPR_sample sampleBPR_Cython(self):

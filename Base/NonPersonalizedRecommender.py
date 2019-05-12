@@ -37,10 +37,12 @@ class TopPop(BaseRecommender):
         else:
             item_pop_to_copy = self.item_pop.copy()
 
-        scores_batch = np.array(item_pop_to_copy, dtype=np.float32).reshape((1, -1))
-        scores_batch = np.repeat(scores_batch, len(user_id_array), axis = 0)
+        item_scores = np.array(item_pop_to_copy, dtype=np.float32).reshape((1, -1))
+        item_scores = np.repeat(item_scores, len(user_id_array), axis = 0)
 
-        return scores_batch
+        item_scores = self._compute_item_score_postprocess_for_cold_items(item_scores)
+
+        return item_scores
 
 
     def saveModel(self, folder_path, file_name = None):
@@ -127,10 +129,12 @@ class GlobalEffects(BaseRecommender):
         else:
             item_bias_to_copy = self.item_bias.copy()
 
-        scores_batch = np.array(item_bias_to_copy, dtype=np.float).reshape((1, -1))
-        scores_batch = np.repeat(scores_batch, len(user_id_array), axis = 0)
+        item_scores = np.array(item_bias_to_copy, dtype=np.float).reshape((1, -1))
+        item_scores = np.repeat(item_scores, len(user_id_array), axis = 0)
 
-        return scores_batch
+        item_scores = self._compute_item_score_postprocess_for_cold_items(item_scores)
+
+        return item_scores
 
 
     def saveModel(self, folder_path, file_name = None):
@@ -168,13 +172,13 @@ class Random(BaseRecommender):
         # Create a random block (len(user_id_array), n_items) array with the item score
 
         if items_to_compute is not None:
-            scores_batch = - np.ones((len(user_id_array), self.n_items), dtype=np.float32)*np.inf
-            scores_batch[:, items_to_compute] = np.random.rand(len(user_id_array), len(items_to_compute))
+            item_scores = - np.ones((len(user_id_array), self.n_items), dtype=np.float32)*np.inf
+            item_scores[:, items_to_compute] = np.random.rand(len(user_id_array), len(items_to_compute))
 
         else:
-            scores_batch = np.random.rand(len(user_id_array), self.n_items)
+            item_scores = np.random.rand(len(user_id_array), self.n_items)
 
-        return scores_batch
+        return item_scores
 
 
 

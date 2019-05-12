@@ -74,30 +74,33 @@ class SearchBayesianSkopt(SearchAbstractClass):
 
     def _init_metadata_dict(self):
 
-        self.metadata_dict = {"search_algorithm_name": self.ALGORITHM_NAME,
-                              "algorithm_name": self.recommender_class.RECOMMENDER_NAME,
-                              "parameters_list": [None]*self.n_calls,
-                              "validation_result_list": [None]*self.n_calls,
-                              "train_time_list": [None]*self.n_calls,
-                              "evaluation_time_list": [None]*self.n_calls,
-                              "train_time_total": 0.0,
-                              "evaluation_time_total": 0.0,
-                              "train_time_avg": 0.0,
-                              "evaluation_time_avg": 0.0,
+        self.metadata_dict = {"algorithm_name_search": self.ALGORITHM_NAME,
+                              "algorithm_name_recommender": self.recommender_class.RECOMMENDER_NAME,
 
-                              "test_result_list": [None]*self.n_calls,
-                              "evaluation_test_time_list": [None]*self.n_calls,
-                              "evaluation_test_time_total": 0.0,
-                              "evaluation_test_time_avg": 0.0,
+                              "hyperparameters_list": [None]*self.n_calls,
+                              "hyperparameters_best": None,
+                              "hyperparameters_best_index": None,
 
-                              "full_data_test_result": None,
-                              "full_data_train_time": None,
-                              "evaluation_full_data_test_time": None,
+                              "result_on_validation_list": [None]*self.n_calls,
+                              "result_on_validation_best": None,
+                              "result_on_test_list": [None]*self.n_calls,
+                              "result_on_test_best": None,
 
-                              "best_parameters": None,
-                              "best_parameters_index": None,
-                              "best_result_validation": None,
-                              "best_result_test": None,
+                              "time_on_train_list": [None]*self.n_calls,
+                              "time_on_train_total": 0.0,
+                              "time_on_train_avg": 0.0,
+
+                              "time_on_validation_list": [None]*self.n_calls,
+                              "time_on_validation_total": 0.0,
+                              "time_on_validation_avg": 0.0,
+
+                              "time_on_test_list": [None]*self.n_calls,
+                              "time_on_test_total": 0.0,
+                              "time_on_test_avg": 0.0,
+
+                              "result_on_last": None,
+                              "time_on_last_train": None,
+                              "time_on_last_test": None,
                               }
 
 
@@ -155,7 +158,6 @@ class SearchBayesianSkopt(SearchAbstractClass):
         self.hyperparams = dict()
         self.hyperparams_names = list()
         self.hyperparams_values = list()
-        self.hyperparams_single_value = dict()
 
         skopt_types = [Real, Integer, Categorical]
 
@@ -165,9 +167,6 @@ class SearchBayesianSkopt(SearchAbstractClass):
                 self.hyperparams_names.append(name)
                 self.hyperparams_values.append(hyperparam)
                 self.hyperparams[name] = hyperparam
-
-            elif(isinstance(hyperparam, str) or isinstance(hyperparam, int) or isinstance(hyperparam, bool)):
-                self.hyperparams_single_value[name] = hyperparam
 
             else:
                 raise ValueError("{}: Unexpected parameter type: {} - {}".format(self.ALGORITHM_NAME, str(name), str(hyperparam)))
@@ -218,8 +217,7 @@ class SearchBayesianSkopt(SearchAbstractClass):
 
         recommender_instance.fit(*self.recommender_input_args.FIT_POSITIONAL_ARGS,
                                  **self.recommender_input_args.FIT_KEYWORD_ARGS,
-                                 **current_fit_parameters,
-                                 **self.hyperparams_single_value)
+                                 **current_fit_parameters)
 
         train_time = time.time() - start_time
         start_time = time.time()
@@ -269,28 +267,21 @@ class SearchBayesianSkopt(SearchAbstractClass):
 
         print("{}: Evaluation with constructor data for final test. Using best config:".format(self.ALGORITHM_NAME), self.best_solution_parameters)
 
-        # If the recommender uses Earlystopping,
-        # disable earlystopping forcing the best_solution_parameters number of epochs
-        # Disable earlystopping by removing the evaluator
-        fit_keyword_args = self.recommender_input_args_last_test.FIT_KEYWORD_ARGS.copy()
 
-        if isinstance(recommender_instance, Incremental_Training_Early_Stopping):
-            if "evaluator_object" in fit_keyword_args:
-                fit_keyword_args["evaluator_object"] = None
+        # Use the hyperparameters that have been saved
+        fit_keyword_args = self.metadata_dict["hyperparameters_best"].copy()
 
 
         recommender_instance.fit(*self.recommender_input_args_last_test.FIT_POSITIONAL_ARGS,
-                                 **fit_keyword_args,
-                                 **self.best_solution_parameters,
-                                 **self.hyperparams_single_value)
+                                 **fit_keyword_args)
 
         train_time = time.time() - start_time
 
         result_dict_test, result_string, evaluation_test_time = self._evaluate_on_test(recommender_instance, print_log = False)
 
-        self.metadata_dict["full_data_test_result"] = result_dict_test
-        self.metadata_dict["full_data_train_time"] = train_time
-        self.metadata_dict["evaluation_full_data_test_time"] = evaluation_test_time
+        self.metadata_dict["result_on_last"] = result_dict_test
+        self.metadata_dict["time_on_last_train"] = train_time
+        self.metadata_dict["time_on_last_test"] = evaluation_test_time
 
         writeLog("{}: Best config evaluated with evaluator_test with constructor data for final test. Config: {} - results:\n{}\n".format(self.ALGORITHM_NAME,
                                                                                              self.best_solution_parameters,
@@ -333,15 +324,16 @@ class SearchBayesianSkopt(SearchAbstractClass):
 
 
             if self.save_metadata:
-                self.metadata_dict["parameters_list"][self.model_counter] = current_fit_parameters_dict.copy()
-                self.metadata_dict["validation_result_list"][self.model_counter] = result_dict.copy()
-                self.metadata_dict["train_time_list"][self.model_counter] = train_time
-                self.metadata_dict["evaluation_time_list"][self.model_counter] = evaluation_time
-                self.metadata_dict["train_time_total"] += train_time
-                self.metadata_dict["evaluation_time_total"] += evaluation_time
+                self.metadata_dict["hyperparameters_list"][self.model_counter] = current_fit_parameters_dict.copy()
+                self.metadata_dict["result_on_validation_list"][self.model_counter] = result_dict.copy()
 
-                self.metadata_dict["train_time_avg"] = self.metadata_dict["train_time_total"]/(self.model_counter+1)
-                self.metadata_dict["evaluation_time_avg"] = self.metadata_dict["evaluation_time_total"]/(self.model_counter+1)
+                self.metadata_dict["time_on_train_list"][self.model_counter] = train_time
+                self.metadata_dict["time_on_validation_list"][self.model_counter] = evaluation_time
+                self.metadata_dict["time_on_train_total"] += train_time
+                self.metadata_dict["time_on_validation_total"] += evaluation_time
+
+                self.metadata_dict["time_on_train_avg"] = self.metadata_dict["time_on_train_total"]/(self.model_counter+1)
+                self.metadata_dict["time_on_validation_avg"] = self.metadata_dict["time_on_validation_total"]/(self.model_counter+1)
 
 
 
@@ -367,9 +359,9 @@ class SearchBayesianSkopt(SearchAbstractClass):
                 self.best_solution_parameters = current_fit_parameters_dict.copy()
 
                 if self.save_metadata:
-                    self.metadata_dict["best_parameters"] = current_fit_parameters_dict.copy()
-                    self.metadata_dict["best_result_validation"] = result_dict.copy()
-                    self.metadata_dict["best_parameters_index"] = self.best_solution_counter
+                    self.metadata_dict["hyperparameters_best"] = current_fit_parameters_dict.copy()
+                    self.metadata_dict["hyperparameters_best_index"] = self.best_solution_counter
+                    self.metadata_dict["result_on_validation_best"] = result_dict.copy()
 
 
 
@@ -385,14 +377,13 @@ class SearchBayesianSkopt(SearchAbstractClass):
 
 
                     if self.save_metadata:
-                        self.metadata_dict["best_result_test"] = result_dict_test.copy()
-                        self.metadata_dict["test_result_list"][self.model_counter] = result_dict_test.copy()
-                        self.metadata_dict["evaluation_test_time_list"][self.model_counter] = evaluation_test_time
-                        self.metadata_dict["evaluation_test_time_total"] += evaluation_test_time
+                        self.metadata_dict["result_on_test_best"] = result_dict_test.copy()
+                        self.metadata_dict["result_on_test_list"][self.model_counter] = result_dict_test.copy()
+                        self.metadata_dict["time_on_test_list"][self.model_counter] = evaluation_test_time
+                        self.metadata_dict["time_on_test_total"] += evaluation_test_time
 
-                        tested_models = sum([value is not None for value in self.metadata_dict["test_result_list"]])
-
-                        self.metadata_dict["evaluation_test_time_avg"] = self.metadata_dict["evaluation_test_time_total"]/tested_models
+                        tested_models = sum([value is not None for value in self.metadata_dict["time_on_test_list"]])
+                        self.metadata_dict["time_on_test_avg"] = self.metadata_dict["time_on_test_total"]/tested_models
 
 
 
@@ -414,12 +405,13 @@ class SearchBayesianSkopt(SearchAbstractClass):
                          " If no better valid configuration is found, this parameter search may produce an invalid result.\n", self.log_file)
 
 
-        except Exception as exc:
+        except:
+            # Catch any error: Exception, Tensorflow errors etc...
 
             writeLog("{}: Config {} Exception. Config: {} - Exception: {}\n".format(self.ALGORITHM_NAME,
                                                                                   self.model_counter,
                                                                                   current_fit_parameters_dict,
-                                                                                  str(exc)), self.log_file)
+                                                                                  traceback.format_exc()), self.log_file)
 
             # Assign to this configuration the worst possible score
             # Being a minimization problem, set it to the max value of a float

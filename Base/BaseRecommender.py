@@ -40,9 +40,18 @@ class BaseRecommender(object):
                 self.RECOMMENDER_NAME, self._cold_user_mask.sum(), self._cold_user_mask.sum()/len(self._cold_user_mask)*100))
 
 
+        self._cold_item_mask = np.ediff1d(self.URM_train.tocsc().indptr) == 0
+
+        if self._cold_item_mask.any():
+            print("{}: Detected {} ({:.2f} %) cold items.".format(
+                self.RECOMMENDER_NAME, self._cold_item_mask.sum(), self._cold_item_mask.sum()/len(self._cold_item_mask)*100))
+
 
     def _get_cold_user_mask(self):
         return self._cold_user_mask
+
+    def _get_cold_item_mask(self):
+        return self._cold_item_mask
 
 
     def fit(self):
@@ -80,6 +89,13 @@ class BaseRecommender(object):
         self.items_to_ignore_ID = np.array([], dtype=np.int)
 
 
+    #########################################################################################################
+    ##########                                                                                     ##########
+    ##########                     COMPUTE AND FILTER RECOMMENDATION LIST                          ##########
+    ##########                                                                                     ##########
+    #########################################################################################################
+
+
     def _remove_TopPop_on_scores(self, scores_batch):
         scores_batch[:, self.filterTopPop_ItemsID] = -np.inf
         return scores_batch
@@ -100,43 +116,6 @@ class BaseRecommender(object):
         return scores
 
 
-
-    def _get_temp_folder(self, custom_temp_folder = None):
-        """
-        The function returns the path of a folder in result_experiments
-        The function guarantees that the folder is not already existent and it creates it
-        :return:
-        """
-
-        if custom_temp_folder is None:
-
-            default_temp_folder_name = "./result_experiments/__Temp_{}".format(self.RECOMMENDER_NAME)
-            progressive_temp_folder_name = default_temp_folder_name
-
-            counter_suffix = 0
-
-            while os.path.isdir(progressive_temp_folder_name):
-
-                counter_suffix += 1
-                progressive_temp_folder_name = default_temp_folder_name + "_" + str(counter_suffix)
-
-            os.makedirs(progressive_temp_folder_name)
-
-            print("{}: Using default Temp folder '{}'".format(self.RECOMMENDER_NAME, progressive_temp_folder_name))
-
-            return progressive_temp_folder_name
-
-        else:
-
-            if not os.path.isdir(custom_temp_folder):
-                os.makedirs(custom_temp_folder)
-
-            print("{}: Using custom Temp folder '{}'".format(self.RECOMMENDER_NAME, custom_temp_folder))
-
-            return custom_temp_folder
-
-
-
     def _compute_item_score(self, user_id_array, items_to_compute = None):
         """
 
@@ -149,6 +128,35 @@ class BaseRecommender(object):
 
 
 
+    def _compute_item_score_postprocess_for_cold_users(self, user_id_array, item_scores):
+        """
+        Remove cold users from the computed item scores, setting them to -inf
+        :param user_id_array:
+        :param item_scores:
+        :return:
+        """
+
+        cold_users_batch_mask = self._get_cold_user_mask()[user_id_array]
+
+        # Set as -inf all cold user scores
+        if cold_users_batch_mask.any():
+            item_scores[cold_users_batch_mask, :] = - np.ones_like(item_scores[cold_users_batch_mask, :]) * np.inf
+
+        return item_scores
+
+
+    def _compute_item_score_postprocess_for_cold_items(self, item_scores):
+        """
+        Remove cold items from the computed item scores, setting them to -inf
+        :param item_scores:
+        :return:
+        """
+
+        # Set as -inf all cold items scores
+        if self._get_cold_item_mask().any():
+            item_scores[:, self._get_cold_item_mask()] = - np.ones_like(item_scores[:, self._get_cold_item_mask()]) * np.inf
+
+        return item_scores
 
 
 
@@ -248,6 +256,11 @@ class BaseRecommender(object):
 
 
 
+    #########################################################################################################
+    ##########                                                                                     ##########
+    ##########                                LOAD AND SAVE                                        ##########
+    ##########                                                                                     ##########
+    #########################################################################################################
 
 
 

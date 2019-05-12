@@ -240,6 +240,11 @@ class MatrixFactorization_AsySVD_Cython(_MatrixFactorization_Cython):
 
     def fit(self, **key_args):
 
+        if "batch_size" in key_args and key_args["batch_size"] > 1:
+            print("{}: batch_size not supported for this recommender, setting to default value 1.".format(self.RECOMMENDER_NAME))
+
+        key_args["batch_size"] = 1
+
         super(MatrixFactorization_AsySVD_Cython, self).fit(**key_args)
 
 
