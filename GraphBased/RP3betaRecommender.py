@@ -8,22 +8,18 @@ import numpy as np
 import scipy.sparse as sps
 
 from sklearn.preprocessing import normalize
-from Base.Recommender import Recommender
 from Base.Recommender_utils import check_matrix, similarityMatrixTopK
 
-from Base.SimilarityMatrixRecommender import SimilarityMatrixRecommender
+from Base.BaseSimilarityMatrixRecommender import BaseSimilarityMatrixRecommender
 import time, sys
 
-class RP3betaRecommender(SimilarityMatrixRecommender, Recommender):
+class RP3betaRecommender(BaseSimilarityMatrixRecommender):
     """ RP3beta recommender """
 
     RECOMMENDER_NAME = "RP3betaRecommender"
 
     def __init__(self, URM_train):
-        super(RP3betaRecommender, self).__init__()
-
-        self.URM_train = check_matrix(URM_train, format='csr', dtype=np.float32)
-        self.sparse_weights = True
+        super(RP3betaRecommender, self).__init__(URM_train)
 
 
     def __str__(self):
@@ -142,13 +138,14 @@ class RP3betaRecommender(SimilarityMatrixRecommender, Recommender):
                 start_time_printBatch = time.time()
 
 
-        self.W = sps.csr_matrix((values[:numCells], (rows[:numCells], cols[:numCells])), shape=(Pui.shape[1], Pui.shape[1]))
+        self.W_sparse = sps.csr_matrix((values[:numCells], (rows[:numCells], cols[:numCells])), shape=(Pui.shape[1], Pui.shape[1]))
 
         if self.normalize_similarity:
-            self.W = normalize(self.W, norm='l1', axis=1)
+            self.W_sparse = normalize(self.W_sparse, norm='l1', axis=1)
 
 
         if self.topK != False:
-            self.W_sparse = similarityMatrixTopK(self.W, forceSparseOutput = True, k=self.topK)
-            self.sparse_weights = True
+            self.W_sparse = similarityMatrixTopK(self.W_sparse, k=self.topK)
 
+
+        self.W_sparse = check_matrix(self.W_sparse, format='csr')

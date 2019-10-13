@@ -3,17 +3,22 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Exclude Notebooks data files
-Notebooks_utils/movielens_10m.zip
-Notebooks_utils/ml-10M100K
-.ipynb_checkpoints
-result_experiments
+# IDEA
+.idea/*
 
-# Exclude all that is in folder, except python files
-data/Movielens_10M
-!data/Movielens_10M/*.py
+# DATA FILES
+Data_manager_split_datasets/**
+Data_manager_offline_datasets/**
+
+**/.pytest_cache/*
 
 
+# Ignore cython compiled files
+**/Cython/*.pyd
+**/Cython/*.so
+**/Cython/*.html
+**/Cython/*.c
+**/Cython/build/*
 
 # Distribution / packaging
 .Python

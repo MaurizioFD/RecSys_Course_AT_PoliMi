@@ -12,10 +12,10 @@ import time
 import numpy as np
 from scipy.special import expit
 
-from Base.Recommender import Recommender
+from Base.BaseRecommender import BaseRecommender
 
 
-class SLIM_BPR(Recommender):
+class SLIM_BPR(BaseRecommender):
     """
     This class is a python porting of the BPRSLIM algorithm in MyMediaLite written in C#
     The code is identical with no optimizations

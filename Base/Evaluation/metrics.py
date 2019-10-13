@@ -39,7 +39,8 @@ class Coverage_Item(Metrics_Object):
         self.n_ignore_items = len(ignore_items)
 
     def add_recommendations(self, recommended_items_ids):
-        self.recommended_mask[recommended_items_ids] = True
+        if len(recommended_items_ids) > 0:
+            self.recommended_mask[recommended_items_ids] = True
 
     def get_metric_value(self):
         return self.recommended_mask.sum()/(len(self.recommended_mask)-self.n_ignore_items)
@@ -79,6 +80,61 @@ class Coverage_User(Metrics_Object):
 
 
 
+class MAP(Metrics_Object):
+    """
+    Mean Average Precision, defined as the mean of the AveragePrecision over all users
+
+    """
+
+    def __init__(self):
+        super(MAP, self).__init__()
+        self.cumulative_AP = 0.0
+        self.n_users = 0
+
+    def add_recommendations(self, is_relevant, pos_items):
+        self.cumulative_AP += average_precision(is_relevant, pos_items)
+        self.n_users += 1
+
+    def get_metric_value(self):
+        return self.cumulative_AP/self.n_users
+
+    def merge_with_other(self, other_metric_object):
+        assert other_metric_object is MAP, "MAP: attempting to merge with a metric object of different type"
+
+        self.cumulative_AP += other_metric_object.cumulative_AP
+        self.n_users += other_metric_object.n_users
+
+
+
+
+
+class MRR(Metrics_Object):
+    """
+    Mean Reciprocal Rank, defined as the mean of the Reciprocal Rank over all users
+
+    """
+
+    def __init__(self):
+        super(MRR, self).__init__()
+        self.cumulative_RR = 0.0
+        self.n_users = 0
+
+    def add_recommendations(self, is_relevant):
+        self.cumulative_RR += rr(is_relevant)
+        self.n_users += 1
+
+    def get_metric_value(self):
+        return self.cumulative_RR/self.n_users
+
+    def merge_with_other(self, other_metric_object):
+        assert other_metric_object is MAP, "MRR: attempting to merge with a metric object of different type"
+
+        self.cumulative_RR += other_metric_object.cumulative_RR
+        self.n_users += other_metric_object.n_users
+
+
+
+
 
 class Gini_Diversity(Metrics_Object):
     """
@@ -98,7 +154,8 @@ class Gini_Diversity(Metrics_Object):
         self.ignore_items = ignore_items.astype(np.int).copy()
 
     def add_recommendations(self, recommended_items_ids):
-        self.recommended_counter[recommended_items_ids] += 1
+        if len(recommended_items_ids) > 0:
+            self.recommended_counter[recommended_items_ids] += 1
 
     def get_metric_value(self):
 
@@ -147,7 +204,8 @@ class Diversity_Herfindahl(Metrics_Object):
         self.ignore_items = ignore_items.astype(np.int).copy()
 
     def add_recommendations(self, recommended_items_ids):
-        self.recommended_counter[recommended_items_ids] += 1
+        if len(recommended_items_ids) > 0:
+            self.recommended_counter[recommended_items_ids] += 1
 
     def get_metric_value(self):
 
@@ -158,7 +216,10 @@ class Diversity_Herfindahl(Metrics_Object):
 
         recommended_counter = recommended_counter[recommended_counter_mask]
 
-        herfindahl_index = 1 - np.sum((recommended_counter/recommended_counter.sum())**2)
+        if recommended_counter.sum() != 0:
+            herfindahl_index = 1 - np.sum((recommended_counter / recommended_counter.sum()) ** 2)
+        else:
+            herfindahl_index = np.nan
 
         return herfindahl_index
 
@@ -193,7 +254,8 @@ class Shannon_Entropy(Metrics_Object):
         self.ignore_items = ignore_items.astype(np.int).copy()
 
     def add_recommendations(self, recommended_items_ids):
-        self.recommended_counter[recommended_items_ids] += 1
+        if len(recommended_items_ids) > 0:
+            self.recommended_counter[recommended_items_ids] += 1
 
     def get_metric_value(self):
 
@@ -260,13 +322,16 @@ class Novelty(Metrics_Object):
 
     def add_recommendations(self, recommended_items_ids):
 
-        recommended_items_popularity = self.item_popularity[recommended_items_ids]
-
-        probability = recommended_items_popularity/self.n_interactions
-        probability = probability[probability!=0]
-
-        self.novelty += np.sum(-np.log2(probability)/self.n_items)
         self.n_evaluated_users += 1
+
+        if len(recommended_items_ids)>0:
+            recommended_items_popularity = self.item_popularity[recommended_items_ids]
+
+            probability = recommended_items_popularity/self.n_interactions
+            probability = probability[probability!=0]
+
+            self.novelty += np.sum(-np.log2(probability)/self.n_items)
+
 
     def get_metric_value(self):
 
@@ -281,6 +346,56 @@ class Novelty(Metrics_Object):
         self.novelty = self.novelty + other_metric_object.novelty
         self.n_evaluated_users = self.n_evaluated_users + other_metric_object.n_evaluated_users
 
+
+
+
+
+
+
+class AveragePopularity(Metrics_Object):
+    """
+    Average popularity the recommended items have in the train data.
+    The popularity is normalized by setting as 1 the item with the highest popularity in the train data
+    """
+
+    def __init__(self, URM_train):
+        super(AveragePopularity, self).__init__()
+
+        URM_train = sps.csc_matrix(URM_train)
+        URM_train.eliminate_zeros()
+        item_popularity = np.ediff1d(URM_train.indptr)
+
+
+        self.cumulative_popularity = 0.0
+        self.n_evaluated_users = 0
+        self.n_items = URM_train.shape[0]
+        self.n_interactions = item_popularity.sum()
+
+        self.item_popularity_normalized = item_popularity/item_popularity.max()
+
+
+    def add_recommendations(self, recommended_items_ids):
+
+        self.n_evaluated_users += 1
+
+        if len(recommended_items_ids)>0:
+            recommended_items_popularity = self.item_popularity_normalized[recommended_items_ids]
+
+            self.cumulative_popularity += np.sum(recommended_items_popularity)/len(recommended_items_ids)
+
+
+    def get_metric_value(self):
+
+        if self.n_evaluated_users == 0:
+            return 0.0
+
+        return self.cumulative_popularity/self.n_evaluated_users
+
+    def merge_with_other(self, other_metric_object):
+        assert other_metric_object is Novelty, "AveragePopularity: attempting to merge with a metric object of different type"
+
+        self.cumulative_popularity = self.cumulative_popularity + other_metric_object.cumulative_popularity
+        self.n_evaluated_users = self.n_evaluated_users + other_metric_object.n_evaluated_users
 
 
 
@@ -410,8 +525,11 @@ class Diversity_MeanInterList(Metrics_Object):
 
         assert len(recommended_items_ids) <= self.cutoff, "Diversity_MeanInterList: recommended list is contains more elements than cutoff"
 
-        self.recommended_counter[recommended_items_ids] += 1
         self.n_evaluated_users += 1
+
+        if len(recommended_items_ids) > 0:
+            self.recommended_counter[recommended_items_ids] += 1
+
 
 
 
@@ -476,7 +594,8 @@ def roc_auc(is_relevant):
 
 
 def arhr(is_relevant):
-    # average reciprocal hit-rank (ARHR)
+    # average reciprocal hit-rank (ARHR) of all relevant items
+    # As opposed to MRR, ARHR takes into account all relevant items and not just the first
     # pag 17
     # http://glaros.dtc.umn.edu/gkhome/fetch/papers/itemrsTOIS04.pdf
     # https://emunix.emich.edu/~sverdlik/COSC562/ItemBasedTopTen.pdf
@@ -484,27 +603,60 @@ def arhr(is_relevant):
     p_reciprocal = 1/np.arange(1,len(is_relevant)+1, 1.0, dtype=np.float64)
     arhr_score = is_relevant.dot(p_reciprocal)
 
-    assert 0 <= arhr_score <= p_reciprocal.sum(), arhr_score
+    #assert 0 <= arhr_score <= p_reciprocal.sum(), "arhr_score {} should be between 0 and {}".format(arhr_score, p_reciprocal.sum())
+    assert not np.isnan(arhr_score), "ARHR is NaN"
     return arhr_score
 
 
 
-def precision(is_relevant, n_test_items):
+def precision(is_relevant):
 
-    precision_score = np.sum(is_relevant, dtype=np.float32) / min(n_test_items, len(is_relevant))
+    if len(is_relevant) == 0:
+        precision_score = 0.0
+    else:
+        precision_score = np.sum(is_relevant, dtype=np.float32) / len(is_relevant)
 
     assert 0 <= precision_score <= 1, precision_score
     return precision_score
 
 
+def precision_recall_min_denominator(is_relevant, n_test_items):
 
-def recall_min_test_len(is_relevant, pos_items):
+    if len(is_relevant) == 0:
+        precision_score = 0.0
+    else:
+        precision_score = np.sum(is_relevant, dtype=np.float32) / min(n_test_items, len(is_relevant))
 
-    recall_score = np.sum(is_relevant, dtype=np.float32) / min(pos_items.shape[0], len(is_relevant))
+    assert 0 <= precision_score <= 1, precision_score
+    return precision_score
 
-    assert 0 <= recall_score <= 1, recall_score
-    return recall_score
 
+def rmse(all_items_predicted_ratings, relevant_items, relevant_items_rating):
+
+    # Important, some items will have -np.inf score and are treated as if they did not exist
+
+    # RMSE with test items
+    relevant_items_error = (all_items_predicted_ratings[relevant_items]-relevant_items_rating)**2
+
+    finite_prediction_mask = np.isfinite(relevant_items_error)
+
+    if finite_prediction_mask.sum() == 0:
+        rmse = np.nan
+
+    else:
+        relevant_items_error = relevant_items_error[finite_prediction_mask]
+
+        squared_error = np.sum(relevant_items_error)
+
+        # # Second the RMSE against all non-test items assumed having true rating 0
+        # # In order to avoid the need of explicitly indexing all non-relevant items, use a difference
+        # squared_error += np.sum(all_items_predicted_ratings[np.isfinite(all_items_predicted_ratings)]**2) - \
+        #                  np.sum(all_items_predicted_ratings[relevant_items][np.isfinite(all_items_predicted_ratings[relevant_items])]**2)
+
+        mean_squared_error = squared_error/finite_prediction_mask.sum()
+        rmse = np.sqrt(mean_squared_error)
+
+    return rmse
 
 
 def recall(is_relevant, pos_items):
@@ -526,13 +678,16 @@ def rr(is_relevant):
         return 0.0
 
 
-def map(is_relevant, pos_items):
+def average_precision(is_relevant, pos_items):
 
-    p_at_k = is_relevant * np.cumsum(is_relevant, dtype=np.float32) / (1 + np.arange(is_relevant.shape[0]))
-    map_score = np.sum(p_at_k) / np.min([pos_items.shape[0], is_relevant.shape[0]])
+    if len(is_relevant) == 0:
+        a_p = 0.0
+    else:
+        p_at_k = is_relevant * np.cumsum(is_relevant, dtype=np.float32) / (1 + np.arange(is_relevant.shape[0]))
+        a_p = np.sum(p_at_k) / np.min([pos_items.shape[0], is_relevant.shape[0]])
 
-    assert 0 <= map_score <= 1, map_score
-    return map_score
+    assert 0 <= a_p <= 1, a_p
+    return a_p
 
 
 def ndcg(ranked_list, pos_items, relevance=None, at=None):
