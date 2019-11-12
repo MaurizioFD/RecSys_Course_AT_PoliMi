@@ -66,7 +66,7 @@ source RecSysFramework/bin/activate
 If you are using conda:
 ```Python
 conda create -n RecSysFramework python=3.6 anaconda
-source activate RecSysFramework
+conda activate RecSysFramework
 ```
 
 Then install all the requirements and dependencies
