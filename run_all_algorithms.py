@@ -4,7 +4,7 @@ from SLIM_ElasticNet.SLIMElasticNetRecommender import SLIMElasticNetRecommender
 
 from MatrixFactorization.Cython.MatrixFactorization_Cython import MatrixFactorization_BPR_Cython, MatrixFactorization_FunkSVD_Cython, MatrixFactorization_AsySVD_Cython
 from MatrixFactorization.PureSVDRecommender import PureSVDRecommender
-from MatrixFactorization.WRMFRecommender import WRMFRecommender
+from MatrixFactorization.IALSRecommender import IALSRecommender
 
 from Base.NonPersonalizedRecommender import TopPop, Random, GlobalEffects
 
@@ -25,7 +25,7 @@ if __name__ == '__main__':
 
     dataset_object = Movielens10MReader()
 
-    dataSplitter = DataSplitter_leave_k_out(dataset_object, k_value=2)
+    dataSplitter = DataSplitter_leave_k_out(dataset_object, k_out_value=2)
 
     dataSplitter.load_data()
     URM_train, URM_validation, URM_test = dataSplitter.get_holdout_split()
@@ -44,7 +44,7 @@ if __name__ == '__main__':
         MatrixFactorization_FunkSVD_Cython,
         MatrixFactorization_AsySVD_Cython,
         PureSVDRecommender,
-        WRMFRecommender,
+        IALSRecommender,
     ]
 
 
