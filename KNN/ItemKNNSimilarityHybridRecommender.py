@@ -7,11 +7,11 @@ Created on 15/04/18
 """
 
 from Base.Recommender_utils import check_matrix, similarityMatrixTopK
-from Base.BaseSimilarityMatrixRecommender import BaseSimilarityMatrixRecommender
+from Base.BaseSimilarityMatrixRecommender import BaseItemSimilarityMatrixRecommender
 
 
 
-class ItemKNNSimilarityHybridRecommender(BaseSimilarityMatrixRecommender):
+class ItemKNNSimilarityHybridRecommender(BaseItemSimilarityMatrixRecommender):
     """ ItemKNNSimilarityHybridRecommender
     Hybrid of two similarities S = S1*alpha + S2*(1-alpha)
 
@@ -20,8 +20,8 @@ class ItemKNNSimilarityHybridRecommender(BaseSimilarityMatrixRecommender):
     RECOMMENDER_NAME = "ItemKNNSimilarityHybridRecommender"
 
 
-    def __init__(self, URM_train, Similarity_1, Similarity_2):
-        super(ItemKNNSimilarityHybridRecommender, self).__init__(URM_train)
+    def __init__(self, URM_train, Similarity_1, Similarity_2, verbose = True):
+        super(ItemKNNSimilarityHybridRecommender, self).__init__(URM_train, verbose = verbose)
 
         if Similarity_1.shape != Similarity_2.shape:
             raise ValueError("ItemKNNSimilarityHybridRecommender: similarities have different size, S1 is {}, S2 is {}".format(

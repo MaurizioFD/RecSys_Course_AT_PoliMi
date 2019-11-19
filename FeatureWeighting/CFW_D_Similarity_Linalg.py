@@ -8,9 +8,7 @@ Created on 08/09/17
 
 
 from Base.Similarity.Compute_Similarity import Compute_Similarity
-
-from Base.SimilarityMatrixRecommender import SimilarityMatrixRecommender
-from Base.Recommender import Recommender
+from Base.BaseSimilarityMatrixRecommender import BaseItemSimilarityMatrixRecommender
 from Base.Recommender_utils import check_matrix
 
 
@@ -20,14 +18,14 @@ import numpy as np
 
 
 
-class CFW_D_Similarity_Linalg(SimilarityMatrixRecommender, Recommender):
+class CFW_D_Similarity_Linalg(BaseItemSimilarityMatrixRecommender):
 
     RECOMMENDER_NAME = "CFW_D_Similarity_Linalg"
 
 
     def __init__(self, URM_train, ICM, S_matrix_target):
 
-        super(CFW_D_Similarity_Linalg, self).__init__()
+        super(CFW_D_Similarity_Linalg, self).__init__(URM_train)
 
 
         if (URM_train.shape[1] != ICM.shape[0]):
@@ -42,7 +40,6 @@ class CFW_D_Similarity_Linalg(SimilarityMatrixRecommender, Recommender):
             raise ValueError("Number of items not consistent. S_matrix contains {} but ICM contains {}".format(S_matrix_target.shape[0],
                                                                                                           ICM.shape[0]))
 
-        self.URM_train = check_matrix(URM_train, 'csr')
         self.S_matrix_target = check_matrix(S_matrix_target, 'csr')
         self.ICM = check_matrix(ICM, 'csr')
 

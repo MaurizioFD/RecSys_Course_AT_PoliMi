@@ -71,17 +71,17 @@ def run_recommender(recommender_class):
 
         recommender_object.saveModel(temp_save_file_folder, file_name="temp_model")
 
-        write_log_string(log_file, "saveModel OK, ")
+        write_log_string(log_file, "save_model OK, ")
 
 
 
         recommender_object = recommender_class(URM_train)
-        recommender_object.loadModel(temp_save_file_folder, file_name="temp_model")
+        recommender_object.load_model(temp_save_file_folder, file_name= "temp_model")
 
         evaluator = EvaluatorHoldout(URM_test, [5], exclude_seen=True)
         _, results_run_string_2 = evaluator.evaluateRecommender(recommender_object)
 
-        write_log_string(log_file, "loadModel OK, ")
+        write_log_string(log_file, "load_model OK, ")
 
 
 

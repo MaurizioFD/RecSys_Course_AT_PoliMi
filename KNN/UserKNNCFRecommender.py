@@ -7,7 +7,7 @@ Created on 23/10/17
 """
 
 from Base.Recommender_utils import check_matrix
-from Base.BaseSimilarityMatrixRecommender import BaseSimilarityMatrixRecommender
+from Base.BaseSimilarityMatrixRecommender import BaseUserSimilarityMatrixRecommender
 
 from Base.IR_feature_weighting import okapi_BM_25, TF_IDF
 import numpy as np
@@ -15,7 +15,7 @@ import numpy as np
 from Base.Similarity.Compute_Similarity import Compute_Similarity
 
 
-class UserKNNCFRecommender(BaseSimilarityMatrixRecommender):
+class UserKNNCFRecommender(BaseUserSimilarityMatrixRecommender):
     """ UserKNN recommender"""
 
     RECOMMENDER_NAME = "UserKNNCFRecommender"
@@ -23,21 +23,9 @@ class UserKNNCFRecommender(BaseSimilarityMatrixRecommender):
     FEATURE_WEIGHTING_VALUES = ["BM25", "TF-IDF", "none"]
 
 
-    def __init__(self, URM_train):
-        super(UserKNNCFRecommender, self).__init__(URM_train)
+    def __init__(self, URM_train, verbose = True):
+        super(UserKNNCFRecommender, self).__init__(URM_train, verbose = verbose)
 
-        self._compute_item_score = self._compute_score_user_based
-
-
-    def _compute_item_score_postprocess_for_cold_users(self, user_id_array, item_scores):
-        """
-        Remove cold users from the computed item scores, setting them to -inf
-        :param user_id_array:
-        :param item_scores:
-        :return:
-        """
-
-        return item_scores
 
 
     def fit(self, topK=50, shrink=100, similarity='cosine', normalize=True, feature_weighting = "none", **similarity_args):

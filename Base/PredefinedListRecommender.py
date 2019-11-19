@@ -30,7 +30,7 @@ class PredefinedListRecommender(BaseRecommender):
         pass
 
 
-    def recommend(self, user_id, cutoff = None, remove_seen_flag=True, remove_top_pop_flag = False, remove_CustomItems_flag = False):
+    def recommend(self, user_id, cutoff = None, remove_seen_flag=True, remove_top_pop_flag = False, remove_custom_items_flag = False):
 
         if cutoff is None:
             cutoff= self.URM_train.shape[1] - 1

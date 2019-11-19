@@ -21,8 +21,8 @@ class _MatrixFactorization_Cython(BaseMatrixFactorizationRecommender, Incrementa
     RECOMMENDER_NAME = "MatrixFactorization_Cython_Recommender"
 
 
-    def __init__(self, URM_train, recompile_cython = False, algorithm_name = "MF_BPR"):
-        super(_MatrixFactorization_Cython, self).__init__(URM_train)
+    def __init__(self, URM_train, verbose = True, recompile_cython = False, algorithm_name = "MF_BPR"):
+        super(_MatrixFactorization_Cython, self).__init__(URM_train, verbose = verbose)
 
         self.n_users, self.n_items = self.URM_train.shape
         self.normalize = False
@@ -41,14 +41,13 @@ class _MatrixFactorization_Cython(BaseMatrixFactorizationRecommender, Incrementa
             negative_interactions_quota = 0.0,
             init_mean = 0.0, init_std_dev = 0.1,
             user_reg = 0.0, item_reg = 0.0, bias_reg = 0.0, positive_reg = 0.0, negative_reg = 0.0,
-            verbose = False, random_seed = None,
+            random_seed = None,
             **earlystopping_kwargs):
 
 
         self.num_factors = num_factors
         self.use_bias = use_bias
         self.sgd_mode = sgd_mode
-        self.verbose = verbose
         self.positive_threshold_BPR = positive_threshold_BPR
         self.learning_rate = learning_rate
 
@@ -74,7 +73,7 @@ class _MatrixFactorization_Cython(BaseMatrixFactorizationRecommender, Incrementa
                                                                 init_mean = init_mean,
                                                                 negative_interactions_quota = negative_interactions_quota,
                                                                 init_std_dev = init_std_dev,
-                                                                verbose = verbose,
+                                                                verbose = self.verbose,
                                                                 random_seed = random_seed)
 
         elif self.algorithm_name == "MF_BPR":
@@ -100,7 +99,7 @@ class _MatrixFactorization_Cython(BaseMatrixFactorizationRecommender, Incrementa
                                                                 use_bias = use_bias,
                                                                 init_mean = init_mean,
                                                                 init_std_dev = init_std_dev,
-                                                                verbose = verbose,
+                                                                verbose = self.verbose,
                                                                 random_seed = random_seed)
         self._prepare_model_for_validation()
         self._update_best_model()
@@ -301,35 +300,4 @@ class MatrixFactorization_AsySVD_Cython(_MatrixFactorization_Cython):
             print("{}: Estimating user factors... done!".format(self.algorithm_name))
 
         return USER_factors
-
-
-
-    def set_URM_train(self, URM_train_new, estimate_item_similarity_for_cold_users = False, **kwargs):
-        """
-
-        :param URM_train_new:
-        :param estimate_item_similarity_for_cold_users: Set to TRUE if you want to estimate the USER_factors for cold users
-        :param kwargs:
-        :return:
-        """
-
-        assert self.URM_train.shape == URM_train_new.shape, "{}: set_URM_train old and new URM train have different shapes".format(self.RECOMMENDER_NAME)
-
-        if len(kwargs)>0:
-            print("{}: set_URM_train keyword arguments not supported for this recommender class. Received: {}".format(self.RECOMMENDER_NAME, kwargs))
-
-        self.URM_train = check_matrix(URM_train_new.copy(), 'csr', dtype=np.float32)
-        self.URM_train.eliminate_zeros()
-
-        # No need to ever use a knn model
-        self._cold_user_KNN_model_available = False
-        self._cold_user_mask = np.ediff1d(self.URM_train.indptr) == 0
-
-        if estimate_item_similarity_for_cold_users:
-
-            print("{}: Estimating USER_factors for cold users...".format(self.RECOMMENDER_NAME))
-
-            self.USER_factors = self._estimate_user_factors(self.ITEM_factors_Y_best)
-
-            print("{}: Estimating USER_factors for cold users... done!".format(self.RECOMMENDER_NAME))
 

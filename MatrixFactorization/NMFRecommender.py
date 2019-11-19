@@ -29,8 +29,8 @@ class NMFRecommender(BaseMatrixFactorizationRecommender):
 
     BETA_LOSS_VALUES = ["frobenius", "kullback-leibler"]
 
-    def __init__(self, URM_train):
-        super(NMFRecommender, self).__init__(URM_train)
+    def __init__(self, URM_train, verbose = True):
+        super(NMFRecommender, self).__init__(URM_train, verbose = verbose)
 
 
     def fit(self, num_factors=100,
@@ -53,7 +53,7 @@ class NMFRecommender(BaseMatrixFactorizationRecommender):
         if beta_loss not in self.BETA_LOSS_VALUES:
            raise ValueError("Value for 'beta_loss' not recognized. Acceptable values are {}, provided was '{}'".format(self.BETA_LOSS_VALUES, beta_loss))
 
-        print(self.RECOMMENDER_NAME + ": Computing NMF decomposition...")
+        self._print("Computing NMF decomposition...")
 
         nmf_solver = NMF(n_components  = num_factors,
                          init = init_type,
@@ -70,4 +70,4 @@ class NMFRecommender(BaseMatrixFactorizationRecommender):
         self.ITEM_factors = nmf_solver.components_.copy().T
         self.USER_factors = nmf_solver.transform(self.URM_train)
 
-        print(self.RECOMMENDER_NAME + ": Computing NMF decomposition... Done!")
+        self._print("Computing NMF decomposition... Done!")

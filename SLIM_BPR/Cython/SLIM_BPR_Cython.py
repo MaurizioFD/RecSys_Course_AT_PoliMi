@@ -7,7 +7,7 @@ Created on 07/09/17
 """
 
 from Base.Recommender_utils import check_matrix
-from Base.BaseSimilarityMatrixRecommender import BaseSimilarityMatrixRecommender
+from Base.BaseSimilarityMatrixRecommender import BaseItemSimilarityMatrixRecommender
 from Base.Recommender_utils import similarityMatrixTopK
 from Base.Incremental_Training_Early_Stopping import Incremental_Training_Early_Stopping
 
@@ -47,17 +47,18 @@ def get_RAM_status():
 
 
 
-class SLIM_BPR_Cython(BaseSimilarityMatrixRecommender, Incremental_Training_Early_Stopping):
+class SLIM_BPR_Cython(BaseItemSimilarityMatrixRecommender, Incremental_Training_Early_Stopping):
 
     RECOMMENDER_NAME = "SLIM_BPR_Recommender"
 
 
     def __init__(self, URM_train,
+                 verbose = True,
                  free_mem_threshold = 0.5,
                  recompile_cython = False):
 
 
-        super(SLIM_BPR_Cython, self).__init__(URM_train)
+        super(SLIM_BPR_Cython, self).__init__(URM_train, verbose = verbose)
 
         assert free_mem_threshold>=0.0 and free_mem_threshold<=1.0, "SLIM_BPR_Recommender: free_mem_threshold must be between 0.0 and 1.0, provided was '{}'".format(free_mem_threshold)
 
@@ -78,7 +79,6 @@ class SLIM_BPR_Cython(BaseSimilarityMatrixRecommender, Incremental_Training_Earl
             positive_threshold_BPR = None,
             train_with_sparse_weights = None,
             symmetric = True,
-            verbose = False,
             random_seed = None,
             batch_size = 1000, lambda_i = 0.0, lambda_j = 0.0, learning_rate = 1e-4, topK = 200,
             sgd_mode='adagrad', gamma=0.995, beta_1=0.9, beta_2=0.999,
@@ -102,15 +102,15 @@ class SLIM_BPR_Cython(BaseSimilarityMatrixRecommender, Incremental_Training_Earl
             total_m, _, available_m = get_RAM_status()
 
             if total_m is not None:
-                string = "SLIM_BPR_Cython: Automatic selection of fastest train mode. Available RAM is {:.2f} MB ({:.2f}%) of {:.2f} MB, required is {:.2f} MB. ".format(available_m, available_m/total_m*100 , total_m, required_m)
+                string = "Automatic selection of fastest train mode. Available RAM is {:.2f} MB ({:.2f}%) of {:.2f} MB, required is {:.2f} MB. ".format(available_m, available_m/total_m*100 , total_m, required_m)
             else:
-                string = "SLIM_BPR_Cython: Automatic selection of fastest train mode. Unable to get current RAM status, you may be using a non-Linux operating system. "
+                string = "Automatic selection of fastest train mode. Unable to get current RAM status, you may be using a non-Linux operating system. "
 
             if total_m is None or required_m/available_m < self.free_mem_threshold:
-                print(string + "Using dense matrix.")
+                self._print(string + "Using dense matrix.")
                 self.train_with_sparse_weights = False
             else:
-                print(string + "Using sparse matrix.")
+                self._print(string + "Using sparse matrix.")
                 self.train_with_sparse_weights = True
 
 
@@ -140,7 +140,7 @@ class SLIM_BPR_Cython(BaseSimilarityMatrixRecommender, Incremental_Training_Earl
                                                  batch_size=1,
                                                  symmetric = self.symmetric,
                                                  sgd_mode = sgd_mode,
-                                                 verbose = verbose,
+                                                 verbose = self.verbose,
                                                  random_seed = random_seed,
                                                  gamma=gamma,
                                                  beta_1=beta_1,
@@ -186,9 +186,6 @@ class SLIM_BPR_Cython(BaseSimilarityMatrixRecommender, Incremental_Training_Earl
        self.cythonEpoch.epochIteration_Cython()
 
 
-
-
-
     def get_S_incremental_and_set_W(self):
 
         self.S_incremental = self.cythonEpoch.get_S()
@@ -199,29 +196,6 @@ class SLIM_BPR_Cython(BaseSimilarityMatrixRecommender, Incremental_Training_Earl
         else:
             self.W_sparse = similarityMatrixTopK(self.S_incremental, k = self.topK)
             self.W_sparse = check_matrix(self.W_sparse, format='csr')
-
-
-
-
-
-    def writeCurrentConfig(self, currentEpoch, results_run, logFile):
-
-        current_config = {'lambda_i': self.lambda_i,
-                          'lambda_j': self.lambda_j,
-                          'batch_size': self.batch_size,
-                          'learn_rate': self.learning_rate,
-                          'topK_similarity': self.topK,
-                          'epoch': currentEpoch}
-
-        print("Test case: {}\nResults {}\n".format(current_config, results_run))
-        # print("Weights: {}\n".format(str(list(self.weights))))
-
-        sys.stdout.flush()
-
-        if (logFile != None):
-            logFile.write("Test case: {}, Results {}\n".format(current_config, results_run))
-            logFile.flush()
-
 
 
 

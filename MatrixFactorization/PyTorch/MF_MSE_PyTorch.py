@@ -119,11 +119,11 @@ class MF_MSE_PyTorch(BaseRecommender, Incremental_Training_Early_Stopping):
                                         **earlystopping_kwargs)
 
 
+        self.ITEM_factors = self.W_best.copy()
+        self.USER_factors = self.H_best.copy()
 
-        self.W = self.W_best.copy()
-        self.H = self.H_best.copy()
-
-
+        self._print("Computing NMF decomposition... Done!")
+        
         sys.stdout.flush()
 
 
@@ -182,54 +182,3 @@ class MF_MSE_PyTorch(BaseRecommender, Incremental_Training_Early_Stopping):
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-
-
-
-
-
-
-
-
-
-
-
-
-
-    def writeCurrentConfig(self, currentEpoch, results_run, logFile):
-
-        current_config = {'learn_rate': self.learning_rate,
-                          'num_factors': self.n_factors,
-                          'batch_size': 1,
-                          'epoch': currentEpoch}
-
-        print("Test case: {}\nResults {}\n".format(current_config, results_run))
-
-        sys.stdout.flush()
-
-        if (logFile != None):
-            logFile.write("Test case: {}, Results {}\n".format(current_config, results_run))
-            logFile.flush()
-
-
-
-
-
-    def saveModel(self, folder_path, file_name = None):
-
-        if file_name is None:
-            file_name = self.RECOMMENDER_NAME
-
-        print("{}: Saving model in file '{}'".format(self.RECOMMENDER_NAME, folder_path + file_name))
-
-
-        dictionary_to_save = {"W": self.W,
-                              "H": self.H}
-
-
-        pickle.dump(dictionary_to_save,
-                    open(folder_path + file_name, "wb"),
-                    protocol=pickle.HIGHEST_PROTOCOL)
-
-        np.savez(folder_path + "{}.npz".format(file_name), W = self.W, H = self.H)
-
-

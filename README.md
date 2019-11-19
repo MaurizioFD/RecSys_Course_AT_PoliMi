@@ -28,7 +28,7 @@ For Installation instructions see the following section [Installation](#Installa
 A simple wrapper of scikit-optimize allowing for a simple and fast parameter tuning.
 The BayesianSkoptSearch object will save the following files:
 - AlgorithmName_BayesianSkoptSearch.txt file with all the cases explored and the recommendation quality
-- _best_model file which contains the trained model and can be loaded with recommender.loadModel(path_to_best_model_file)
+- _best_model file which contains the trained model and can be loaded with recommender.load_model(path_to_best_model_file)
 - _metadata file which contains a dictionary with all the explored cases, for each the fit parameters, the validation results and, if that configuration was the new best one, the test results. It also contains, for all configurations, the train, validation and test time, in seconds.
  
 #### This repository contains the following runnable scripts

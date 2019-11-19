@@ -37,6 +37,13 @@ def check_matrix(X, format='csc', dtype=np.float32):
         return X.todia().astype(dtype)
     elif format == 'lil' and not isinstance(X, sps.lil_matrix):
         return X.tolil().astype(dtype)
+
+    elif format == 'npy':
+        if sps.issparse(X):
+            return X.toarray().astype(dtype)
+        else:
+            return np.array(X)
+
     elif isinstance(X, np.ndarray):
         X = sps.csr_matrix(X, dtype=dtype)
         X.eliminate_zeros()
@@ -224,21 +231,27 @@ def reshapeSparse(sparseMatrix, newShape):
 
 
 
-def get_unique_temp_folder(imput_temp_folder_path):
+def get_unique_temp_folder(input_temp_folder_path):
     """
     The function returns the path of a folder in result_experiments
     The function guarantees that the folder is not already existent and it creates it
     :return:
     """
-    progressive_temp_folder_name = imput_temp_folder_path
+
+    if input_temp_folder_path[-1] == "/":
+        input_temp_folder_path = input_temp_folder_path[:-1]
+
+    progressive_temp_folder_name = input_temp_folder_path
 
     counter_suffix = 0
 
     while os.path.isdir(progressive_temp_folder_name):
 
         counter_suffix += 1
-        progressive_temp_folder_name = imput_temp_folder_path + "_" + str(counter_suffix)
+        progressive_temp_folder_name = input_temp_folder_path + "_" + str(counter_suffix)
 
+
+    progressive_temp_folder_name += "/"
     os.makedirs(progressive_temp_folder_name)
 
     return progressive_temp_folder_name

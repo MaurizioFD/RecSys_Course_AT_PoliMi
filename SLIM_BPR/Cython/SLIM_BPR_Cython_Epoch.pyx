@@ -795,8 +795,6 @@ cdef class Sparse_Matrix_Tree_CSR:
 
         cdef long row
 
-        #start_time = time.time()
-
         for row in range(self.num_rows):
 
             if self.row_pointer[row].head != NULL:
@@ -809,20 +807,6 @@ cdef class Sparse_Matrix_Tree_CSR:
 
                 # Rebuild the tree
                 self.row_pointer[row].head = self.build_tree_from_list_flat(self.row_pointer[row].head)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
     cdef matrix_element_tree_s * subtree_to_list_flat(self, matrix_element_tree_s * root):

@@ -40,24 +40,22 @@ class TopPop(BaseRecommender):
         item_scores = np.array(item_pop_to_copy, dtype=np.float32).reshape((1, -1))
         item_scores = np.repeat(item_scores, len(user_id_array), axis = 0)
 
-        item_scores = self._compute_item_score_postprocess_for_cold_items(item_scores)
-
         return item_scores
 
 
-    def saveModel(self, folder_path, file_name = None):
+    def save_model(self, folder_path, file_name = None):
 
         if file_name is None:
             file_name = self.RECOMMENDER_NAME
 
-        print("{}: Saving model in file '{}'".format(self.RECOMMENDER_NAME, folder_path + file_name))
+        self._print("Saving model in file '{}'".format(folder_path + file_name))
 
         data_dict_to_save = {"item_pop": self.item_pop}
 
         dataIO = DataIO(folder_path=folder_path)
         dataIO.save_data(file_name=file_name, data_dict_to_save = data_dict_to_save)
 
-        print("{}: Saving complete".format(self.RECOMMENDER_NAME))
+        self._print("Saving complete")
 
 
 
@@ -115,7 +113,6 @@ class GlobalEffects(BaseRecommender):
         # the global average and user bias won't change the ranking, so there is no need to use them
         #self.item_ranking = np.argsort(self.bi)[::-1]
 
-
         self.URM_train = check_matrix(self.URM_train, 'csr', dtype=np.float32)
 
 
@@ -137,19 +134,19 @@ class GlobalEffects(BaseRecommender):
         return item_scores
 
 
-    def saveModel(self, folder_path, file_name = None):
+    def save_model(self, folder_path, file_name = None):
 
         if file_name is None:
             file_name = self.RECOMMENDER_NAME
 
-        print("{}: Saving model in file '{}'".format(self.RECOMMENDER_NAME, folder_path + file_name))
+        self._print("Saving model in file '{}'".format(folder_path + file_name))
 
         data_dict_to_save = {"item_bias": self.item_bias}
 
         dataIO = DataIO(folder_path=folder_path)
         dataIO.save_data(file_name=file_name, data_dict_to_save = data_dict_to_save)
 
-        print("{}: Saving complete".format(self.RECOMMENDER_NAME))
+        self._print("Saving complete")
 
 
 
@@ -182,17 +179,17 @@ class Random(BaseRecommender):
 
 
 
-    def saveModel(self, folder_path, file_name = None):
+    def save_model(self, folder_path, file_name = None):
 
         if file_name is None:
             file_name = self.RECOMMENDER_NAME
 
-        print("{}: Saving model in file '{}'".format(self.RECOMMENDER_NAME, folder_path + file_name))
+        self._print("Saving model in file '{}'".format(folder_path + file_name))
 
         data_dict_to_save = {}
 
         dataIO = DataIO(folder_path=folder_path)
         dataIO.save_data(file_name=file_name, data_dict_to_save = data_dict_to_save)
 
-        print("{}: Saving complete".format(self.RECOMMENDER_NAME))
+        self._print("Saving complete")
 

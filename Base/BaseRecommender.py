@@ -16,7 +16,7 @@ class BaseRecommender(object):
 
     RECOMMENDER_NAME = "Recommender_Base_Class"
 
-    def __init__(self, URM_train):
+    def __init__(self, URM_train, verbose=True):
 
         super(BaseRecommender, self).__init__()
 
@@ -24,8 +24,7 @@ class BaseRecommender(object):
         self.URM_train.eliminate_zeros()
 
         self.n_users, self.n_items = self.URM_train.shape
-
-        self.normalize = False
+        self.verbose = verbose
 
         self.filterTopPop = False
         self.filterTopPop_ItemsID = np.array([], dtype=np.int)
@@ -36,15 +35,15 @@ class BaseRecommender(object):
         self._cold_user_mask = np.ediff1d(self.URM_train.indptr) == 0
 
         if self._cold_user_mask.any():
-            print("{}: Detected {} ({:.2f} %) cold users.".format(
-                self.RECOMMENDER_NAME, self._cold_user_mask.sum(), self._cold_user_mask.sum()/len(self._cold_user_mask)*100))
+            self._print("URM Detected {} ({:.2f} %) cold users.".format(
+                self._cold_user_mask.sum(), self._cold_user_mask.sum()/self.n_users*100))
 
 
         self._cold_item_mask = np.ediff1d(self.URM_train.tocsc().indptr) == 0
 
         if self._cold_item_mask.any():
-            print("{}: Detected {} ({:.2f} %) cold items.".format(
-                self.RECOMMENDER_NAME, self._cold_item_mask.sum(), self._cold_item_mask.sum()/len(self._cold_item_mask)*100))
+            self._print("URM Detected {} ({:.2f} %) cold items.".format(
+                self._cold_item_mask.sum(), self._cold_item_mask.sum()/self.n_items*100))
 
 
     def _get_cold_user_mask(self):
@@ -54,37 +53,21 @@ class BaseRecommender(object):
         return self._cold_item_mask
 
 
+    def _print(self, string):
+        if self.verbose:
+            print("{}: {}".format(self.RECOMMENDER_NAME, string))
+
     def fit(self):
         pass
 
     def get_URM_train(self):
         return self.URM_train.copy()
 
-    def set_URM_train(self, URM_train_new, **kwargs):
-
-        assert self.URM_train.shape == URM_train_new.shape, "{}: set_URM_train old and new URM train have different shapes".format(self.RECOMMENDER_NAME)
-
-        if len(kwargs)>0:
-            print("{}: set_URM_train keyword arguments not supported for this recommender class. Received: {}".format(self.RECOMMENDER_NAME, kwargs))
-
-        self.URM_train = check_matrix(URM_train_new.copy(), 'csr', dtype=np.float32)
-        self.URM_train.eliminate_zeros()
-
-        self._cold_user_mask = np.ediff1d(self.URM_train.indptr) == 0
-
-        if self._cold_user_mask.any():
-            print("{}: Detected {} ({:.2f} %) cold users.".format(
-                self.RECOMMENDER_NAME, self._cold_user_mask.sum(), self._cold_user_mask.sum()/len(self._cold_user_mask)*100))
-
-
-
     def set_items_to_ignore(self, items_to_ignore):
-
         self.items_to_ignore_flag = True
         self.items_to_ignore_ID = np.array(items_to_ignore, dtype=np.int)
 
     def reset_items_to_ignore(self):
-
         self.items_to_ignore_flag = False
         self.items_to_ignore_ID = np.array([], dtype=np.int)
 
@@ -101,7 +84,7 @@ class BaseRecommender(object):
         return scores_batch
 
 
-    def _remove_CustomItems_on_scores(self, scores_batch):
+    def _remove_custom_items_on_scores(self, scores_batch):
         scores_batch[:, self.items_to_ignore_ID] = -np.inf
         return scores_batch
 
@@ -127,41 +110,8 @@ class BaseRecommender(object):
         raise NotImplementedError("BaseRecommender: compute_item_score not assigned for current recommender, unable to compute prediction scores")
 
 
-
-    def _compute_item_score_postprocess_for_cold_users(self, user_id_array, item_scores):
-        """
-        Remove cold users from the computed item scores, setting them to -inf
-        :param user_id_array:
-        :param item_scores:
-        :return:
-        """
-
-        cold_users_batch_mask = self._get_cold_user_mask()[user_id_array]
-
-        # Set as -inf all cold user scores
-        if cold_users_batch_mask.any():
-            item_scores[cold_users_batch_mask, :] = - np.ones_like(item_scores[cold_users_batch_mask, :]) * np.inf
-
-        return item_scores
-
-
-    def _compute_item_score_postprocess_for_cold_items(self, item_scores):
-        """
-        Remove cold items from the computed item scores, setting them to -inf
-        :param item_scores:
-        :return:
-        """
-
-        # Set as -inf all cold items scores
-        if self._get_cold_item_mask().any():
-            item_scores[:, self._get_cold_item_mask()] = - np.ones_like(item_scores[:, self._get_cold_item_mask()]) * np.inf
-
-        return item_scores
-
-
-
     def recommend(self, user_id_array, cutoff = None, remove_seen_flag=True, items_to_compute = None,
-                  remove_top_pop_flag = False, remove_CustomItems_flag = False, return_scores = False):
+                  remove_top_pop_flag = False, remove_custom_items_flag = False, return_scores = False):
 
         # If is a scalar transform it in a 1-cell array
         if np.isscalar(user_id_array):
@@ -170,28 +120,12 @@ class BaseRecommender(object):
         else:
             single_user = False
 
-
         if cutoff is None:
             cutoff = self.URM_train.shape[1] - 1
 
         # Compute the scores using the model-specific function
         # Vectorize over all users in user_id_array
         scores_batch = self._compute_item_score(user_id_array, items_to_compute=items_to_compute)
-
-
-        # if self.normalize:
-        #     # normalization will keep the scores in the same range
-        #     # of value of the ratings in dataset
-        #     user_profile = self.URM_train[user_id]
-        #
-        #     rated = user_profile.copy()
-        #     rated.data = np.ones_like(rated.data)
-        #     if self.sparse_weights:
-        #         den = rated.dot(self.W_sparse).toarray().ravel()
-        #     else:
-        #         den = rated.dot(self.W).ravel()
-        #     den[np.abs(den) < 1e-6] = 1.0  # to avoid NaNs
-        #     scores /= den
 
 
         for user_index in range(len(user_id_array)):
@@ -215,8 +149,8 @@ class BaseRecommender(object):
         if remove_top_pop_flag:
             scores_batch = self._remove_TopPop_on_scores(scores_batch)
 
-        if remove_CustomItems_flag:
-            scores_batch = self._remove_CustomItems_on_scores(scores_batch)
+        if remove_custom_items_flag:
+            scores_batch = self._remove_custom_items_on_scores(scores_batch)
 
         # relevant_items_partition is block_size x cutoff
         relevant_items_partition = (-scores_batch).argpartition(cutoff, axis=1)[:,0:cutoff]
@@ -264,18 +198,18 @@ class BaseRecommender(object):
 
 
 
-    def saveModel(self, folder_path, file_name = None):
-        raise NotImplementedError("BaseRecommender: saveModel not implemented")
+    def save_model(self, folder_path, file_name = None):
+        raise NotImplementedError("BaseRecommender: save_model not implemented")
 
 
 
 
-    def loadModel(self, folder_path, file_name = None):
+    def load_model(self, folder_path, file_name = None):
 
         if file_name is None:
             file_name = self.RECOMMENDER_NAME
 
-        print("{}: Loading model from file '{}'".format(self.RECOMMENDER_NAME, folder_path + file_name))
+        self._print("Loading model from file '{}'".format(folder_path + file_name))
 
         dataIO = DataIO(folder_path=folder_path)
         data_dict = dataIO.load_data(file_name=file_name)
@@ -283,6 +217,4 @@ class BaseRecommender(object):
         for attrib_name in data_dict.keys():
              self.__setattr__(attrib_name, data_dict[attrib_name])
 
-
-        print("{}: Loading complete".format(self.RECOMMENDER_NAME))
-
+        self._print("Loading complete")
