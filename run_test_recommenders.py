@@ -19,6 +19,14 @@ def write_log_string(log_file, string):
     log_file.write(string)
     log_file.flush()
 
+def _get_recommender_instance(recommender_class, URM_train, ICM_train):
+    
+    if recommender_class is ItemKNNCBFRecommender:
+        recommender_object = recommender_class(URM_train, ICM_train)
+    else:
+        recommender_object = recommender_class(URM_train)
+
+    return recommender_object
 
 
 def run_recommender(recommender_class):
@@ -37,12 +45,14 @@ def run_recommender(recommender_class):
 
         dataSplitter.load_data()
         URM_train, URM_validation, URM_test = dataSplitter.get_holdout_split()
-
+        ICM_name = dataSplitter.get_all_available_ICM_names()[0]
+        ICM_train = dataSplitter.get_ICM_from_name(ICM_name)
+        
         write_log_string(log_file, "On Recommender {}\n".format(recommender_class))
 
 
+        recommender_object = _get_recommender_instance(recommender_class, URM_train, ICM_train)
 
-        recommender_object = recommender_class(URM_train)
 
         if isinstance(recommender_object, Incremental_Training_Early_Stopping):
             fit_params = {"epochs": 15}
@@ -69,13 +79,13 @@ def run_recommender(recommender_class):
 
 
 
-        recommender_object.saveModel(temp_save_file_folder, file_name="temp_model")
+        recommender_object.save_model(temp_save_file_folder, file_name="temp_model")
 
         write_log_string(log_file, "save_model OK, ")
 
 
+        recommender_object = _get_recommender_instance(recommender_class, URM_train, ICM_train)
 
-        recommender_object = recommender_class(URM_train)
         recommender_object.load_model(temp_save_file_folder, file_name= "temp_model")
 
         evaluator = EvaluatorHoldout(URM_test, [5], exclude_seen=True)
@@ -117,6 +127,8 @@ from MatrixFactorization.Cython.MatrixFactorization_Cython import MatrixFactoriz
 from SLIM_BPR.Cython.SLIM_BPR_Cython import SLIM_BPR_Cython
 from SLIM_ElasticNet.SLIMElasticNetRecommender import SLIMElasticNetRecommender
 
+from KNN.ItemKNNCBFRecommender import ItemKNNCBFRecommender
+
 
 if __name__ == '__main__':
 
@@ -130,6 +142,7 @@ if __name__ == '__main__':
         GlobalEffects,
         UserKNNCFRecommender,
         ItemKNNCFRecommender,
+        ItemKNNCBFRecommender,
         P3alphaRecommender,
         RP3betaRecommender,
         SLIM_BPR_Cython,

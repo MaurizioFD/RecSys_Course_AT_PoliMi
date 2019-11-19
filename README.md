@@ -169,7 +169,7 @@ dataset = DataPostprocessing_K_Cores(dataset, k_cores_value=25)
 dataset = DataPostprocessing_User_sample(dataset, user_quota=0.3)
 dataset = DataPostprocessing_Implicit_URM(dataset)
 
-dataSplitter = DataSplitter_Warm_k_fold(dataset)
+dataSplitter = DataSplitter_leave_k_out(dataset)
 
 dataSplitter.load_data()
 

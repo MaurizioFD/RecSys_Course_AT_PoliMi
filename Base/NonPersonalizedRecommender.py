@@ -129,8 +129,6 @@ class GlobalEffects(BaseRecommender):
         item_scores = np.array(item_bias_to_copy, dtype=np.float).reshape((1, -1))
         item_scores = np.repeat(item_scores, len(user_id_array), axis = 0)
 
-        item_scores = self._compute_item_score_postprocess_for_cold_items(item_scores)
-
         return item_scores
 
 

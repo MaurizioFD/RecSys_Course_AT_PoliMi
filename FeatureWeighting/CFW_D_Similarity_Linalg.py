@@ -249,7 +249,7 @@ class CFW_D_Similarity_Linalg(BaseItemSimilarityMatrixRecommender):
 
 
 
-    def saveModel(self, folder_path, file_name = None):
+    def save_model(self, folder_path, file_name = None):
 
         import pickle
 
