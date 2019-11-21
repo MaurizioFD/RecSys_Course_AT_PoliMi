@@ -50,9 +50,9 @@ class BaseMatrixFactorizationRecommender(BaseRecommender):
         assert self.USER_factors.shape[1] == self.ITEM_factors.shape[1], \
             "{}: User and Item factors have inconsistent shape".format(self.RECOMMENDER_NAME)
 
-        assert self.USER_factors.shape[0] > user_id_array.max(),\
+        assert self.USER_factors.shape[0] > np.max(user_id_array),\
                 "{}: Cold users not allowed. Users in trained model are {}, requested prediction for users up to {}".format(
-                self.RECOMMENDER_NAME, self.USER_factors.shape[0], user_id_array.max())
+                self.RECOMMENDER_NAME, self.USER_factors.shape[0], np.max(user_id_array))
 
         if items_to_compute is not None:
             item_scores = - np.ones((len(user_id_array), self.ITEM_factors.shape[0]), dtype=np.float32)*np.inf
