@@ -7,11 +7,8 @@ Created on 16/09/2017
 """
 
 from Base.BaseRecommender import BaseRecommender
-from KNN.ItemKNNCustomSimilarityRecommender import ItemKNNCustomSimilarityRecommender
-from Base.Recommender_utils import check_matrix
 from Base.DataIO import DataIO
 import numpy as np
-import scipy.sparse as sps
 
 
 

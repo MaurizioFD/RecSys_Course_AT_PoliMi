@@ -10,7 +10,7 @@ import traceback, os, shutil
 
 
 from Base.Evaluation.Evaluator import EvaluatorHoldout, EvaluatorNegativeItemSample
-from Data_manager.Movielens1M.Movielens1MReader import Movielens1MReader
+from Data_manager.Movielens.Movielens1MReader import Movielens1MReader
 from Data_manager.DataSplitter_leave_k_out import DataSplitter_leave_k_out
 from Base.Incremental_Training_Early_Stopping import Incremental_Training_Early_Stopping
 
@@ -42,8 +42,8 @@ def run_recommender(recommender_class):
         dataset_object = Movielens1MReader()
 
         dataSplitter = DataSplitter_leave_k_out(dataset_object, k_out_value=2)
+        dataSplitter.load_data(save_folder_path= output_folder_path + dataset_object._get_dataset_name() + "_data/")
 
-        dataSplitter.load_data()
         URM_train, URM_validation, URM_test = dataSplitter.get_holdout_split()
         ICM_name = dataSplitter.get_all_available_ICM_names()[0]
         ICM_train = dataSplitter.get_ICM_from_name(ICM_name)
@@ -126,14 +126,15 @@ from MatrixFactorization.Cython.MatrixFactorization_Cython import MatrixFactoriz
 
 from SLIM_BPR.Cython.SLIM_BPR_Cython import SLIM_BPR_Cython
 from SLIM_ElasticNet.SLIMElasticNetRecommender import SLIMElasticNetRecommender
+from EASE_R.EASE_R_Recommender import EASE_R_Recommender
 
 from KNN.ItemKNNCBFRecommender import ItemKNNCBFRecommender
 
 
 if __name__ == '__main__':
 
-
-    log_file_name = "./result_experiments/run_test_recommender.txt"
+    output_folder_path = "./result_experiments/rec_test/"
+    log_file_name = "run_test_recommender.txt"
 
 
     recommender_list = [
@@ -152,9 +153,14 @@ if __name__ == '__main__':
         MatrixFactorization_AsySVD_Cython,
         PureSVDRecommender,
         IALSRecommender,
+        EASE_R_Recommender,
     ]
 
-    log_file = open(log_file_name, "w")
+    # If directory does not exist, create
+    if not os.path.exists(output_folder_path):
+        os.makedirs(output_folder_path)
+
+    log_file = open(output_folder_path + log_file_name, "w")
 
 
 

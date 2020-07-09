@@ -31,9 +31,12 @@ class DataSplitter(object):
      - It exposes the following functions
         - load_data(save_folder_path = None, force_new_split = False)   loads the data or creates a new split
     
-    
     """
-    DATASET_SPLIT_ROOT_FOLDER = "Data_manager_split_datasets/"
+
+    __DATASET_SPLIT_SUBFOLDER = "Data_manager_split_datasets/"
+    DATASET_SPLIT_ROOT_FOLDER = None
+
+
     ICM_SPLIT_SUFFIX = [""]
 
     DATA_SPLITTER_NAME = "DataSplitter"
@@ -47,8 +50,9 @@ class DataSplitter(object):
         :param force_new_split:
         :param forbid_new_split:
         """
-
         super(DataSplitter, self).__init__()
+
+        self.DATASET_SPLIT_ROOT_FOLDER = os.path.join(os.path.dirname(__file__), '..', self.__DATASET_SPLIT_SUBFOLDER)
 
         self.dataReader_object = dataReader_object
         self.forbid_new_split = forbid_new_split
@@ -63,18 +67,44 @@ class DataSplitter(object):
         return self.get_dataReader_object()._get_dataset_name()
 
     def get_ICM_from_name(self, ICM_name):
-        return getattr(self, ICM_name).copy()
+        return self.SPLIT_ICM_DICT[ICM_name].copy()
 
     def get_loaded_ICM_names(self):
         return self.get_dataReader_object().get_loaded_ICM_names()
 
     def get_all_available_ICM_names(self):
-        return self.get_dataReader_object().get_all_available_ICM_names().copy()
+        return self.get_dataReader_object().get_loaded_ICM_names().copy()
 
+    def get_UCM_from_name(self, UCM_name):
+        return self.SPLIT_UCM_DICT[UCM_name].copy()
+
+    def get_loaded_UCM_names(self):
+        return self.get_dataReader_object().get_loaded_UCM_names()
+
+    def get_all_available_UCM_names(self):
+        return self.get_dataReader_object().get_loaded_ICM_names().copy()
 
     def get_loaded_ICM_dict(self):
-        return self.get_dataReader_object().get_loaded_ICM_dict()
+        # return self.get_dataset_object().get_loaded_ICM_dict()
 
+        ICM_dict = {}
+
+        for ICM_name in self.get_loaded_ICM_names():
+
+            ICM_dict[ICM_name] = self.get_ICM_from_name(ICM_name)
+
+        return ICM_dict
+
+    def get_loaded_UCM_dict(self):
+        # return self.get_dataset_object().get_loaded_UCM_dict()
+
+        UCM_dict = {}
+
+        for UCM_name in self.get_loaded_UCM_names():
+
+            UCM_dict[UCM_name] = self.get_UCM_from_name(UCM_name)
+
+        return UCM_dict
 
     def _print(self, message):
         print("{}: {}".format(self.DATA_SPLITTER_NAME, message))
@@ -165,6 +195,21 @@ class DataSplitter(object):
         self.get_statistics_ICM()
 
         self._print("Done.")
+
+
+
+
+    def _load_from_DataReader_ICM_and_mappers(self, loaded_dataset):
+
+        self.SPLIT_ICM_DICT = loaded_dataset.get_loaded_ICM_dict()
+        self.SPLIT_ICM_MAPPER_DICT = loaded_dataset.get_loaded_ICM_feature_mapper_dict()
+
+        self.SPLIT_UCM_DICT = loaded_dataset.get_loaded_UCM_dict()
+        self.SPLIT_UCM_MAPPER_DICT = loaded_dataset.get_loaded_UCM_feature_mapper_dict()
+
+        self.SPLIT_GLOBAL_MAPPER_DICT = loaded_dataset.get_global_mapper_dict()
+
+
 
 
 

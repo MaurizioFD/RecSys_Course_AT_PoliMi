@@ -10,13 +10,15 @@ import scipy.sparse as sps
 import numpy as np
 from Base.DataIO import DataIO
 
-from Data_manager.DataSplitter import DataSplitter
+from Data_manager.DataSplitter import DataSplitter as _DataSplitter
+from Data_manager.DataReader import DataReader as _DataReader
+
 from Data_manager.DataReader_utils import compute_density, reconcile_mapper_with_removed_tokens
-from Data_manager.Split_functions.split_train_validation_leave_k_out import split_train_leave_k_out_user_wise
+from Data_manager.split_functions.split_train_validation_leave_k_out import split_train_leave_k_out_user_wise
 from Data_manager.data_consistency_check import assert_disjoint_matrices, assert_URM_ICM_mapper_consistency
 
 
-class DataSplitter_leave_k_out(DataSplitter):
+class DataSplitter_leave_k_out(_DataSplitter):
     """
     The splitter tries to load from the specific folder related to a dataset, a split in the format corresponding to
     the splitter class. Basically each split is in a different subfolder
@@ -44,12 +46,17 @@ class DataSplitter_leave_k_out(DataSplitter):
     DATA_SPLITTER_NAME = "DataSplitter_leave_k_out"
 
     SPLIT_URM_DICT = None
+
     SPLIT_ICM_DICT = None
     SPLIT_ICM_MAPPER_DICT = None
+
+    SPLIT_UCM_DICT = None
+    SPLIT_UCM_MAPPER_DICT = None
+
     SPLIT_GLOBAL_MAPPER_DICT = None
 
 
-    def __init__(self, dataReader_object, k_out_value = 1, forbid_new_split = False, force_new_split = False, use_validation_set = True, leave_random_out = True):
+    def __init__(self, dataReader_object:_DataReader, k_out_value = 1, forbid_new_split = False, force_new_split = False, use_validation_set = True, leave_random_out = True):
         """
 
         :param dataReader_object:
@@ -64,6 +71,7 @@ class DataSplitter_leave_k_out(DataSplitter):
         self.k_out_value = k_out_value
         self.use_validation_set = use_validation_set
         self.allow_cold_users = False
+        self.removed_cold_users = None
         self.leave_random_out = leave_random_out
 
         self._print("Cold users not allowed")
@@ -163,30 +171,13 @@ class DataSplitter_leave_k_out(DataSplitter):
                self.SPLIT_URM_DICT["URM_test"].copy()
 
 
-
-    def _load_from_DataReader_ICM_and_mappers(self):
-
-        self.SPLIT_ICM_DICT = self.dataReader_object.get_loaded_ICM_dict()
-        self.SPLIT_ICM_MAPPER_DICT = {}
-        self.SPLIT_GLOBAL_MAPPER_DICT = {}
-
-        for ICM_name in self.SPLIT_ICM_DICT.keys():
-            self.SPLIT_ICM_MAPPER_DICT[ICM_name] = self.get_dataReader_object().get_ICM_feature_to_index_mapper_from_name(ICM_name)
-
-        for mapper_name, mapper_object in self.dataReader_object.get_loaded_Global_mappers().items():
-            self.SPLIT_GLOBAL_MAPPER_DICT[mapper_name] = mapper_object.copy()
-
-
-
-
     def _split_data_from_original_dataset(self, save_folder_path):
 
+        self.loaded_dataset = self.dataReader_object.load_data()
+        self._load_from_DataReader_ICM_and_mappers(self.loaded_dataset)
 
-        self.dataReader_object.load_data()
-        self._load_from_DataReader_ICM_and_mappers()
 
-
-        URM = self.dataReader_object.get_URM_all()
+        URM = self.loaded_dataset.get_URM_all()
         URM = sps.csr_matrix(URM)
 
 
@@ -194,15 +185,13 @@ class DataSplitter_leave_k_out(DataSplitter):
         if self.use_validation_set:
             split_number+=1
 
-
         # Min interactions at least self.k_out_value for each split +1 for train and validation
         min_user_interactions = (split_number -1) * self.k_out_value + 1
-
 
         if not self.allow_cold_users:
             user_interactions = np.ediff1d(URM.indptr)
             user_to_preserve = user_interactions >= min_user_interactions
-            user_to_remove = np.logical_not(user_to_preserve)
+            self.removed_cold_users = np.logical_not(user_to_preserve)
 
             self._print("Removing {} ({:.2f} %) of {} users because they have less than the {} interactions required for {} splits ({} for test [and validation if requested] +1 for train)".format(
                  URM.shape[0] - user_to_preserve.sum(), (1-user_to_preserve.sum()/URM.shape[0])*100, URM.shape[0], min_user_interactions, split_number, self.k_out_value))
@@ -210,8 +199,11 @@ class DataSplitter_leave_k_out(DataSplitter):
             URM = URM[user_to_preserve,:]
 
             self.SPLIT_GLOBAL_MAPPER_DICT["user_original_ID_to_index"] = reconcile_mapper_with_removed_tokens(self.SPLIT_GLOBAL_MAPPER_DICT["user_original_ID_to_index"],
-                                                                                                              np.arange(0, len(user_to_remove), dtype=np.int)[user_to_remove])
+                                                                                                              np.arange(0, len(self.removed_cold_users), dtype=np.int)[self.removed_cold_users])
 
+            for UCM_name, UCM_object in self.SPLIT_UCM_DICT.items():
+                UCM_object = UCM_object[user_to_preserve,:]
+                self.SPLIT_UCM_DICT[UCM_name] = UCM_object
 
 
         splitted_data = split_train_leave_k_out_user_wise(URM, k_out = self.k_out_value,
@@ -262,7 +254,8 @@ class DataSplitter_leave_k_out(DataSplitter):
             name_suffix = "_{}_{}".format(allow_cold_users_suffix, validation_set_suffix)
 
             split_parameters_dict = {"k_out_value": self.k_out_value,
-                                     "allow_cold_users": self.allow_cold_users
+                                     "allow_cold_users": self.allow_cold_users,
+                                     "removed_cold_users": self.removed_cold_users,
                                      }
 
 
@@ -278,7 +271,7 @@ class DataSplitter_leave_k_out(DataSplitter):
             dataIO.save_data(data_dict_to_save = self.SPLIT_URM_DICT,
                              file_name = "split_URM" + name_suffix)
 
-            if len(self.dataReader_object.get_loaded_ICM_names())>0:
+            if len(self.SPLIT_ICM_DICT)>0:
                 dataIO.save_data(data_dict_to_save = self.SPLIT_ICM_DICT,
                                  file_name = "split_ICM" + name_suffix)
 
@@ -286,6 +279,12 @@ class DataSplitter_leave_k_out(DataSplitter):
                                  file_name = "split_ICM_mappers" + name_suffix)
 
 
+            if len(self.SPLIT_UCM_DICT)>0:
+                dataIO.save_data(data_dict_to_save = self.SPLIT_UCM_DICT,
+                                 file_name = "split_UCM" + name_suffix)
+
+                dataIO.save_data(data_dict_to_save = self.SPLIT_UCM_MAPPER_DICT,
+                                 file_name = "split_UCM_mappers" + name_suffix)
 
 
     def _load_previously_built_split_and_attributes(self, save_folder_path):
@@ -327,6 +326,10 @@ class DataSplitter_leave_k_out(DataSplitter):
             self.SPLIT_ICM_MAPPER_DICT = dataIO.load_data(file_name ="split_ICM_mappers" + name_suffix)
 
 
+        if len(self.dataReader_object.get_loaded_UCM_names())>0:
+            self.SPLIT_UCM_DICT = dataIO.load_data(file_name ="split_UCM" + name_suffix)
+
+            self.SPLIT_UCM_MAPPER_DICT = dataIO.load_data(file_name ="split_UCM_mappers" + name_suffix)
 
     #########################################################################################################
     ##########                                                                                     ##########
@@ -404,8 +407,11 @@ class DataSplitter_leave_k_out(DataSplitter):
         assert assert_disjoint_matrices(list(self.SPLIT_URM_DICT.values()))
 
         assert_URM_ICM_mapper_consistency(URM_DICT = self.SPLIT_URM_DICT,
-                                          GLOBAL_MAPPER_DICT = self.SPLIT_GLOBAL_MAPPER_DICT,
+                                          user_original_ID_to_index=self.SPLIT_GLOBAL_MAPPER_DICT["user_original_ID_to_index"],
+                                          item_original_ID_to_index=self.SPLIT_GLOBAL_MAPPER_DICT["item_original_ID_to_index"],
                                           ICM_DICT = self.SPLIT_ICM_DICT,
                                           ICM_MAPPER_DICT = self.SPLIT_ICM_MAPPER_DICT,
+                                          UCM_DICT = self.SPLIT_UCM_DICT,
+                                          UCM_MAPPER_DICT = self.SPLIT_UCM_MAPPER_DICT,
                                           DATA_SPLITTER_NAME = self.DATA_SPLITTER_NAME)
 

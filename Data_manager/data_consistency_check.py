@@ -61,7 +61,10 @@ def assert_disjoint_matrices(URM_list):
 
 
 
-def assert_URM_ICM_mapper_consistency(URM_DICT, GLOBAL_MAPPER_DICT, ICM_DICT, ICM_MAPPER_DICT, DATA_SPLITTER_NAME):
+def assert_URM_ICM_mapper_consistency(URM_DICT, user_original_ID_to_index, item_original_ID_to_index,
+                                      ICM_DICT, ICM_MAPPER_DICT,
+                                      UCM_DICT, UCM_MAPPER_DICT,
+                                      DATA_SPLITTER_NAME):
 
     print_preamble = "{} consistency check: ".format(DATA_SPLITTER_NAME)
 
@@ -75,9 +78,9 @@ def assert_URM_ICM_mapper_consistency(URM_DICT, GLOBAL_MAPPER_DICT, ICM_DICT, IC
             URM_all = URM_object.copy()
             URM_all.data = np.ones_like(URM_all.data)
 
-            n_users, n_items_URM = URM_shape
+            n_users_URM, n_items_URM = URM_shape
 
-            assert n_users != 0, print_preamble + "Number of users in URM is 0"
+            assert n_users_URM != 0, print_preamble + "Number of users in URM is 0"
             assert n_items_URM != 0, print_preamble + "Number of items in URM is 0"
 
         else:
@@ -89,22 +92,18 @@ def assert_URM_ICM_mapper_consistency(URM_DICT, GLOBAL_MAPPER_DICT, ICM_DICT, IC
         assert URM_shape == URM_object.shape, print_preamble + "URM shape is inconsistent"
 
 
-    assert n_users != 0, print_preamble + "Number of users in URM is 0"
+    assert n_users_URM != 0, print_preamble + "Number of users in URM is 0"
     assert n_items_URM != 0, print_preamble + "Number of items in URM is 0"
-
-    user_original_ID_to_index = GLOBAL_MAPPER_DICT["user_original_ID_to_index"]
-    item_original_ID_to_index = GLOBAL_MAPPER_DICT["item_original_ID_to_index"]
-
 
     # Check if item index-id and user index-id are consistent
     assert len(set(user_original_ID_to_index.values())) == len(user_original_ID_to_index), "user it-to-index mapper values do not have a 1-to-1 correspondance with the key"
     assert len(set(item_original_ID_to_index.values())) == len(item_original_ID_to_index), "item it-to-index mapper values do not have a 1-to-1 correspondance with the key"
 
-    assert n_users == len(user_original_ID_to_index), print_preamble + "user it-to-index mapper contains a number of keys different then the number of users"
-    assert n_items_URM == len(item_original_ID_to_index), print_preamble + "item it-to-index mapper contains a number of keys different then the number of items"
+    assert n_users_URM == len(user_original_ID_to_index), print_preamble + "user ID-to-index mapper contains a number of keys different then the number of users"
+    assert n_items_URM == len(item_original_ID_to_index), print_preamble + "item ID-to-index mapper contains a number of keys different then the number of items"
 
-    assert n_users >= max(user_original_ID_to_index.values()), print_preamble + "user it-to-index mapper contains indices greater than number of users"
-    assert n_items_URM >= max(item_original_ID_to_index.values()), print_preamble + "item it-to-index mapper contains indices greater than number of item"
+    assert n_users_URM >= max(user_original_ID_to_index.values()), print_preamble + "user ID-to-index mapper contains indices greater than number of users"
+    assert n_items_URM >= max(item_original_ID_to_index.values()), print_preamble + "item ID-to-index mapper contains indices greater than number of item"
 
 
     # Check if every non-empty user and item has a mapper value
@@ -116,7 +115,7 @@ def assert_URM_ICM_mapper_consistency(URM_DICT, GLOBAL_MAPPER_DICT, ICM_DICT, IC
 
     URM_all = sps.csr_matrix(URM_all)
     nonzero_users_mask = np.ediff1d(URM_all.indptr)>0
-    nonzero_users = np.arange(0, n_users, dtype=np.int)[nonzero_users_mask]
+    nonzero_users = np.arange(0, n_users_URM, dtype=np.int)[nonzero_users_mask]
     assert np.isin(nonzero_users, np.array(list(user_original_ID_to_index.values()))).all(), print_preamble + "there exist users with interactions that do not have a mapper entry"
 
     if ICM_MAPPER_DICT is not None:
@@ -141,8 +140,8 @@ def assert_URM_ICM_mapper_consistency(URM_DICT, GLOBAL_MAPPER_DICT, ICM_DICT, IC
             assert n_feature_occurrences != 0, print_preamble + "Number of interactions in ICM {} is 0".format(ICM_name)
 
 
-            assert n_features >= len(feature_original_id_to_index), print_preamble + "feature id-to-index mapper contains more keys than features in ICM {}".format(ICM_name)
-            assert n_features >= max(feature_original_id_to_index.values()), print_preamble + "feature id-to-index mapper contains indices greater than number of features in ICM {}".format(ICM_name)
+            assert n_features >= len(feature_original_id_to_index), print_preamble + "feature ID-to-index mapper contains more keys than features in ICM {}".format(ICM_name)
+            assert n_features >= max(feature_original_id_to_index.values()), print_preamble + "feature ID-to-index mapper contains indices greater than number of features in ICM {}".format(ICM_name)
 
             # Check if every non-empty item and feature has a mapper value
             ICM_object = sps.csr_matrix(ICM_object)
@@ -155,6 +154,48 @@ def assert_URM_ICM_mapper_consistency(URM_DICT, GLOBAL_MAPPER_DICT, ICM_DICT, IC
             nonzero_features_mask = np.ediff1d(ICM_object.indptr)>0
             nonzero_features = np.arange(0, n_features, dtype=np.int)[nonzero_features_mask]
             assert np.isin(nonzero_features, np.array(list(feature_original_id_to_index.values()))).all(), print_preamble + "there exist users with interactions that do not have a mapper entry in ICM {}".format(ICM_name)
+
+
+
+
+
+
+    if UCM_MAPPER_DICT is not None:
+
+        assert len(UCM_DICT) == len(UCM_MAPPER_DICT), print_preamble + "The available UCM and the available UCM mappers do not have the same length. UCMs are {}, mappers are {}".format(len(UCM_DICT), len(UCM_MAPPER_DICT))
+
+        assert all(UCM_name in UCM_MAPPER_DICT for UCM_name in UCM_DICT.keys()), print_preamble + "Not all UCM sparse matrix have a corresponding UCM mapper"
+        assert all(UCM_name in UCM_DICT for UCM_name in UCM_MAPPER_DICT.keys()), print_preamble + "Not all UCM mappers have a corresponding UCM sparse matrix"
+
+
+        for UCM_name, UCM_object in UCM_DICT.items():
+
+            assert UCM_name in UCM_MAPPER_DICT, print_preamble + "No mapper is available for UCM '{}'".format(UCM_name)
+
+            feature_original_id_to_index = UCM_MAPPER_DICT[UCM_name]
+
+            n_users_UCM, n_features = UCM_object.shape
+            n_feature_occurrences = UCM_object.nnz
+
+            assert n_users_UCM == n_users_URM, print_preamble + "Number of users in UCM {} is {} while in URM is {}".format(UCM_name, n_users_UCM, n_users_URM)
+            assert n_features != 0, print_preamble + "Number of features in UCM {} is 0".format(UCM_name)
+            assert n_feature_occurrences != 0, print_preamble + "Number of interactions in UCM {} is 0".format(UCM_name)
+
+
+            assert n_features >= len(feature_original_id_to_index), print_preamble + "feature ID-to-index mapper contains more keys than features in UCM {}".format(UCM_name)
+            assert n_features >= max(feature_original_id_to_index.values()), print_preamble + "feature ID-to-index mapper contains indices greater than number of features in UCM {}".format(UCM_name)
+
+            # Check if every non-empty user and feature has a mapper value
+            UCM_object = sps.csr_matrix(UCM_object)
+            nonzero_users_mask = np.ediff1d(UCM_object.indptr)>0
+            nonzero_users = np.arange(0, n_users_URM, dtype=np.int)[nonzero_users_mask]
+            assert np.isin(nonzero_users, np.array(list(user_original_ID_to_index.values()))).all(), print_preamble + "there exist users with features that do not have a mapper entry in UCM {}".format(UCM_name)
+
+
+            UCM_object = sps.csc_matrix(UCM_object)
+            nonzero_features_mask = np.ediff1d(UCM_object.indptr)>0
+            nonzero_features = np.arange(0, n_features, dtype=np.int)[nonzero_features_mask]
+            assert np.isin(nonzero_features, np.array(list(feature_original_id_to_index.values()))).all(), print_preamble + "there exist users with interactions that do not have a mapper entry in UCM {}".format(UCM_name)
 
 
 

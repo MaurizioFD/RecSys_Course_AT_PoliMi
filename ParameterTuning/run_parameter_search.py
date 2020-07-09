@@ -20,6 +20,7 @@ from KNN.UserKNNCFRecommender import UserKNNCFRecommender
 from KNN.ItemKNNCFRecommender import ItemKNNCFRecommender
 from GraphBased.P3alphaRecommender import P3alphaRecommender
 from GraphBased.RP3betaRecommender import RP3betaRecommender
+from EASE_R.EASE_R_Recommender import EASE_R_Recommender
 
 # KNN machine learning
 from SLIM_BPR.Cython.SLIM_BPR_Cython import SLIM_BPR_Cython
@@ -519,6 +520,24 @@ def runParameterSearch_Collaborative(recommender_class, URM_train, URM_train_las
                 FIT_POSITIONAL_ARGS = [],
                 FIT_KEYWORD_ARGS = {}
             )
+
+
+        #########################################################################################################
+
+        if recommender_class is EASE_R_Recommender:
+
+            hyperparameters_range_dictionary = {}
+            hyperparameters_range_dictionary["topK"] = Categorical([None])#Integer(5, 3000)
+            hyperparameters_range_dictionary["normalize_matrix"] = Categorical([False])
+            hyperparameters_range_dictionary["l2_norm"] = Real(low = 1e0, high = 1e7, prior = 'log-uniform')
+
+            recommender_input_args = SearchInputRecommenderArgs(
+                CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
+                CONSTRUCTOR_KEYWORD_ARGS = {},
+                FIT_POSITIONAL_ARGS = [],
+                FIT_KEYWORD_ARGS = {}
+            )
+
 
 
 

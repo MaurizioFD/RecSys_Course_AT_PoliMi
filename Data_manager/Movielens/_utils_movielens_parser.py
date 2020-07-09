@@ -1,18 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on 14/09/17
+Created on 26/11/19
 
 @author: Maurizio Ferrari Dacrema
 """
 
-
-import zipfile
 import pandas as pd
-
-from Data_manager.DataReader import DataReader
-from Data_manager.DataReader_utils import downloadFromURL, merge_ICM
-
 
 
 
@@ -167,89 +161,47 @@ def _loadICM_tags(tags_path, header=True, separator=',', if_new_item = "ignore",
 
 
 
+def _loadUCM(UCM_path, header=True, separator=','):
+
+    # Genres
+    from Data_manager.IncrementalSparseMatrix import IncrementalSparseMatrix_FilterIDs
+
+    ICM_builder = IncrementalSparseMatrix_FilterIDs(preinitialized_col_mapper = None, on_new_col = "add",
+                                                    preinitialized_row_mapper = None, on_new_row = "add")
 
 
+    fileHandle = open(UCM_path, "r", encoding="latin1")
+    numCells = 0
 
-class Movielens20MReader(DataReader):
+    if header:
+        fileHandle.readline()
 
-    DATASET_URL = "http://files.grouplens.org/datasets/movielens/ml-20m.zip"
-    DATASET_SUBFOLDER = "Movielens20M/"
-    AVAILABLE_ICM = ["ICM_all", "ICM_genres", "ICM_tags"]
-    AVAILABLE_URM = ["URM_all", "URM_timestamp"]
+    for line in fileHandle:
+        numCells += 1
+        if (numCells % 1000000 == 0):
+            print("Processed {} cells".format(numCells))
 
-    IS_IMPLICIT = True
+        if (len(line)) > 1:
+            line = line.split(separator)
 
+            line[-1] = line[-1].replace("\n", "")
 
+            user_id = line[0]
 
+            token_list = []
+            token_list.append("gender_" + str(line[1]))
+            token_list.append("age_group_" + str(line[2]))
+            token_list.append("occupation_" + str(line[3]))
+            token_list.append("zip_code_" + str(line[4]))
 
-    def _get_dataset_name_root(self):
-        return self.DATASET_SUBFOLDER
-
-
-    def _load_from_original_file(self):
-        # Load data from original
-
-        print("Movielens20MReader: Loading original data")
-
-        zipFile_path =  self.DATASET_SPLIT_ROOT_FOLDER + self.DATASET_SUBFOLDER
-
-        try:
-
-            dataFile = zipfile.ZipFile(zipFile_path + "ml-20m.zip")
-
-        except (FileNotFoundError, zipfile.BadZipFile):
-
-            print("Movielens20MReader: Unable to fild data zip file. Downloading...")
-
-            downloadFromURL(self.DATASET_URL, zipFile_path, "ml-20m.zip")
-
-            dataFile = zipfile.ZipFile(zipFile_path + "ml-20m.zip")
+            # Rows movie ID
+            # Cols features
+            ICM_builder.add_single_row(user_id, token_list, data = 1.0)
 
 
-        genres_path = dataFile.extract("ml-20m/movies.csv", path=zipFile_path + "decompressed/")
-        tags_path = dataFile.extract("ml-20m/tags.csv", path=zipFile_path + "decompressed/")
-        URM_path = dataFile.extract("ml-20m/ratings.csv", path=zipFile_path + "decompressed/")
+    fileHandle.close()
 
-
-        print("Movielens20MReader: loading genres")
-        ICM_genres, tokenToFeatureMapper_ICM_genres, self.item_original_ID_to_index = _loadICM_genres(genres_path, header=True, separator=',', genresSeparator="|")
-
-        self._LOADED_ICM_DICT["ICM_genres"] = ICM_genres
-        self._LOADED_ICM_MAPPER_DICT["ICM_genres"] = tokenToFeatureMapper_ICM_genres
-
-        print("Movielens20MReader: loading tags")
-        ICM_tags, tokenToFeatureMapper_ICM_tags, _ = _loadICM_tags(tags_path, header=True, separator=',', if_new_item = "ignore",
-                                                                    item_original_ID_to_index = self.item_original_ID_to_index)
-        self._LOADED_ICM_DICT["ICM_tags"] = ICM_tags
-        self._LOADED_ICM_MAPPER_DICT["ICM_tags"] = tokenToFeatureMapper_ICM_tags
-
-        print("Movielens20MReader: loading URM")
-        URM_all, self.item_original_ID_to_index, self.user_original_ID_to_index, URM_timestamp = _loadURM_preinitialized_item_id(URM_path, separator=",",
-                                                                                          header = True, if_new_user = "add", if_new_item = "ignore",
-                                                                                          item_original_ID_to_index = self.item_original_ID_to_index)
-
-        self._LOADED_URM_DICT["URM_all"] = URM_all
-        self._LOADED_URM_DICT["URM_timestamp"] = URM_timestamp
-        self._LOADED_GLOBAL_MAPPER_DICT["user_original_ID_to_index"] = self.user_original_ID_to_index
-        self._LOADED_GLOBAL_MAPPER_DICT["item_original_ID_to_index"] = self.item_original_ID_to_index
-
-        ICM_all, tokenToFeatureMapper_ICM_all = merge_ICM(ICM_genres, ICM_tags,
-                                                          tokenToFeatureMapper_ICM_genres,
-                                                          tokenToFeatureMapper_ICM_tags)
-
-        self._LOADED_ICM_DICT["ICM_all"] = ICM_all
-        self._LOADED_ICM_MAPPER_DICT["ICM_all"] = tokenToFeatureMapper_ICM_all
-
-
-        print("Movielens20MReader: cleaning temporary files")
-
-        import shutil
-
-        shutil.rmtree(zipFile_path + "decompressed", ignore_errors=True)
-
-        print("Movielens20MReader: saving URM and ICM")
-
-
+    return ICM_builder.get_SparseMatrix(), ICM_builder.get_column_token_to_id_mapper(), ICM_builder.get_row_token_to_id_mapper()
 
 
 
