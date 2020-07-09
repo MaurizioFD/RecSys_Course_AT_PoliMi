@@ -1,7 +1,7 @@
 # RecSys Course @ Politecnico di Milano
 This is the official repository for the 2019 Recommender Systems course at Polimi.
 
-Developed by Maurizio Ferrari Dacrema, PhD candidate at Politecnico di Milano. See our [website](http://recsys.deib.polimi.it/) for more information on our research group and available thesis.
+Developed by <a href="https://mauriziofd.github.io/" target="_blank">Maurizio Ferrari Dacrema</a>, PhD candidate at Politecnico di Milano. See our [website](http://recsys.deib.polimi.it/) for more information on our research group and available thesis.
 For Installation instructions see the following section [Installation](#Installation).
 
 
