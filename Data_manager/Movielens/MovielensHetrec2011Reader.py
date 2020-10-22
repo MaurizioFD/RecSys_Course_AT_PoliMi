@@ -3,12 +3,14 @@
 """
 Created on 19/02/2019
 
-@author: Simone Boglio
+@author: Maurizio Ferrari Dacrema
 """
 
 
 
 import zipfile, shutil
+import pandas as pd
+from Data_manager.DatasetMapperManager import DatasetMapperManager
 from Data_manager.Dataset import Dataset
 from Data_manager.DataReader import DataReader
 from Data_manager.DataReader_utils import download_from_URL, load_CSV_into_SparseBuilder
@@ -39,7 +41,7 @@ class MovielensHetrec2011Reader(DataReader):
 
         except (FileNotFoundError, zipfile.BadZipFile):
 
-            self._print("Unable to fild data zip file. Downloading...")
+            self._print("Unable to find data zip file. Downloading...")
 
             download_from_URL(self.DATASET_URL, zipFile_path, "hetrec2011-movielens-2k-v2.zip")
 
@@ -49,31 +51,24 @@ class MovielensHetrec2011Reader(DataReader):
         URM_path = dataFile.extract("user_ratedmovies.dat", path=zipFile_path + "decompressed/")
 
 
-        URM_all, item_original_ID_to_index, user_original_ID_to_index = load_CSV_into_SparseBuilder(URM_path,
-                                                                                                    separator="\t",
-                                                                                                    header=True,
-                                                                                                    custom_user_item_rating_columns = [0, 1, 2])
+        self._print("Loading Interactions")
+        URM_all_dataframe = pd.read_csv(filepath_or_buffer=URM_path, sep="\t", header=0,
+                                        dtype={0:str, 1:str, 2:float}, usecols=[0, 1, 2])
+        URM_all_dataframe.columns = ["UserID", "ItemID", "Data"]
 
 
-        loaded_URM_dict = {"URM_all": URM_all}
+        dataset_manager = DatasetMapperManager()
+        dataset_manager.add_URM(URM_all_dataframe, "URM_all")
 
-        loaded_dataset = Dataset(dataset_name = self._get_dataset_name(),
-                                 URM_dictionary = loaded_URM_dict,
-                                 ICM_dictionary = None,
-                                 ICM_feature_mapper_dictionary = None,
-                                 UCM_dictionary = None,
-                                 UCM_feature_mapper_dictionary = None,
-                                 user_original_ID_to_index= user_original_ID_to_index,
-                                 item_original_ID_to_index= item_original_ID_to_index,
-                                 is_implicit = self.IS_IMPLICIT,
-                                 )
+        loaded_dataset = dataset_manager.generate_Dataset(dataset_name=self._get_dataset_name(),
+                                                          is_implicit=self.IS_IMPLICIT)
 
 
         self._print("cleaning temporary files")
 
         shutil.rmtree(zipFile_path + "decompressed", ignore_errors=True)
 
-        self._print("loading complete")
+        self._print("Loading Complete")
 
         return loaded_dataset
 

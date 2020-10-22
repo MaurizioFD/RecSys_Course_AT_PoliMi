@@ -8,9 +8,10 @@ Created on 14/09/17
 
 
 import zipfile, shutil
-from Data_manager.Dataset import Dataset
+from Data_manager.DatasetMapperManager import DatasetMapperManager
 from Data_manager.DataReader import DataReader
-from Data_manager.DataReader_utils import download_from_URL, load_CSV_into_SparseBuilder
+from Data_manager.DataReader_utils import download_from_URL
+from Data_manager.Movielens._utils_movielens_parser import _loadURM
 
 
 class Movielens100KReader(DataReader):
@@ -36,7 +37,7 @@ class Movielens100KReader(DataReader):
 
         except (FileNotFoundError, zipfile.BadZipFile):
 
-            self._print("Unable to fild data zip file. Downloading...")
+            self._print("Unable to find data zip file. Downloading...")
 
             download_from_URL(self.DATASET_URL, zipFile_path, "ml-100k.zip")
 
@@ -45,30 +46,22 @@ class Movielens100KReader(DataReader):
 
         URM_path = dataFile.extract("ml-100k/u.data", path=zipFile_path + "decompressed/")
 
-        URM_all, URM_timestamp, item_original_ID_to_index, user_original_ID_to_index = load_CSV_into_SparseBuilder(URM_path, separator="\t", header=False, timestamp=True)
 
+        self._print("Loading Interactions")
+        URM_all_dataframe, URM_timestamp_dataframe = _loadURM(URM_path, header=None, separator='\t')
 
-        loaded_URM_dict = {"URM_all": URM_all,
-                           "URM_timestamp": URM_timestamp}
+        dataset_manager = DatasetMapperManager()
+        dataset_manager.add_URM(URM_all_dataframe, "URM_all")
+        dataset_manager.add_URM(URM_timestamp_dataframe, "URM_timestamp")
 
-        loaded_dataset = Dataset(dataset_name = self._get_dataset_name(),
-                                 URM_dictionary = loaded_URM_dict,
-                                 ICM_dictionary = None,
-                                 ICM_feature_mapper_dictionary = None,
-                                 UCM_dictionary = None,
-                                 UCM_feature_mapper_dictionary = None,
-                                 user_original_ID_to_index= user_original_ID_to_index,
-                                 item_original_ID_to_index= item_original_ID_to_index,
-                                 is_implicit = self.IS_IMPLICIT,
-                                 )
-
-
+        loaded_dataset = dataset_manager.generate_Dataset(dataset_name=self._get_dataset_name(),
+                                                          is_implicit=self.IS_IMPLICIT)
 
         self._print("cleaning temporary files")
 
         shutil.rmtree(zipFile_path + "decompressed", ignore_errors=True)
 
-        self._print("loading complete")
+        self._print("Loading Complete")
 
         return loaded_dataset
 

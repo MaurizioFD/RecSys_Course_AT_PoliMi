@@ -89,14 +89,14 @@ def remove_empty_rows_and_cols(URM, ICM = None):
 
 
 
-from Data_manager.IncrementalSparseMatrix import IncrementalSparseMatrix
+from Data_manager.IncrementalSparseMatrix import IncrementalSparseMatrix, IncrementalSparseMatrix_FilterIDs
 import pandas as pd
 
-def remove_Dataframe_duplicates(dataframe, sort_by_columns = ['UserID', 'ItemID'], keep_highest_value_in_col = "timestamp"):
+def remove_Dataframe_duplicates(dataframe, unique_values_in_columns = ['UserID', 'ItemID'], keep_highest_value_in_col ="timestamp"):
     """
 
     :param dataframe:
-    :param sort_by_columns:     List of column headers. The combination of the two will occur only once
+    :param unique_values_in_columns:     List of column headers. The combination of the two will occur only once
     :param keep_highest_value_in_col:   Column where the max value will be selected if a duplicate will be removed
     :return:
     """
@@ -112,25 +112,101 @@ def remove_Dataframe_duplicates(dataframe, sort_by_columns = ['UserID', 'ItemID'
     # 1 - Sort in ascending order so that the last (bigger) timestamp is in the last position. Set Nan to be in the first position, to remove them if possible
     # 2 - Then remove duplicates for user-item keeping the last row, which will be the last timestamp.
 
-    sort_by = sort_by_columns
+    sort_by = unique_values_in_columns.copy()
     sort_by.extend([keep_highest_value_in_col])
 
     dataframe.sort_values(by=sort_by, ascending=True, inplace=True, kind="quicksort", na_position="first")
-    dataframe.drop_duplicates(["UserID", "ItemID"], keep='last', inplace=True)
+    dataframe.drop_duplicates(unique_values_in_columns, keep='last', inplace=True)
 
-    user_id_list = dataframe['UserID'].values
+    n_data_points = len(dataframe[unique_values_in_columns[0]].values)
 
-    num_unique_user_item_ids = dataframe.drop_duplicates(['UserID', 'ItemID'], keep='first', inplace=False).shape[0]
+    n_unique_data_points = dataframe.drop_duplicates(unique_values_in_columns, keep='first', inplace=False).shape[0]
 
-    assert num_unique_user_item_ids == len(user_id_list), "remove_Dataframe_duplicates: duplicate (user, item) values found"
+    assert n_unique_data_points == n_data_points, "remove_Dataframe_duplicates: duplicate values found"
 
     return dataframe
 
-def load_CSV_into_SparseBuilder (filePath, header = False, separator="::", timestamp = False, remove_duplicates = False,
-                                 custom_user_item_rating_columns = None):
 
-    URM_all_builder = IncrementalSparseMatrix(auto_create_col_mapper = True, auto_create_row_mapper = True)
-    URM_timestamp_builder = IncrementalSparseMatrix(auto_create_col_mapper = True, auto_create_row_mapper = True)
+
+
+def load_CSV_into_Dataframe (filePath, header = False, separator="::", timestamp = False,
+                             remove_duplicates = False,
+                             custom_user_item_rating_columns = None):
+    """
+    The function loads a CSV file into a Dataframe
+    :param filePath:
+    :param header:      True/False the file does have a header
+    :param separator:
+    :param timestamp:   True/False load the timestamp as well
+    :param remove_duplicates:   Remove row/column duplicates, if the timestamp is provided it kees the most recent one,
+                                otherwise the highest rating or interaction value.
+    :param custom_user_item_rating_columns:     Column names for the user_id, item_id and rating value as in the file header
+    :return:
+    """
+
+
+    if timestamp:
+        dtype={0:str, 1:str, 2:float, 3:float}
+        columns = ['UserID', 'ItemID', 'interaction', 'timestamp']
+
+    else:
+        dtype={0:str, 1:str, 2:float}
+        columns = ['UserID', 'ItemID', 'interaction']
+
+    df_original = pd.read_csv(filepath_or_buffer=filePath, sep=separator, header= 0 if header else None,
+                    dtype=dtype, usecols=custom_user_item_rating_columns)
+
+    # If the original file has more columns, keep them but ignore them
+    df_original.columns = columns
+    user_id_list = df_original['UserID'].values
+
+    # Check if duplicates exist
+    num_unique_user_item_ids = df_original.drop_duplicates(['UserID', 'ItemID'], keep='first', inplace=False).shape[0]
+    contains_duplicates_flag = num_unique_user_item_ids != len(user_id_list)
+
+    if contains_duplicates_flag:
+        if remove_duplicates:
+            df_original = remove_Dataframe_duplicates(df_original, unique_values_in_columns= ['UserID', 'ItemID'],
+                                                      keep_highest_value_in_col = "timestamp" if timestamp else "interaction")
+
+        else:
+            assert num_unique_user_item_ids == len(user_id_list), "load_CSV_into_SparseBuilder: duplicate (user, item) values found"
+
+
+    return  df_original
+
+
+
+def load_CSV_into_SparseBuilder (filePath, header = False, separator="::", timestamp = False, remove_duplicates = False,
+                                 custom_user_item_rating_columns = None, create_mapper = True,
+                                 preinitialized_row_mapper = None, preinitialized_col_mapper = None,
+                                 on_new_col = "add", on_new_row = "add"):
+    """
+    The function loads a CSV file into a URM
+    :param filePath:
+    :param header:      True/False the file does have a header
+    :param separator:
+    :param timestamp:   True/False load the timestamp as well
+    :param remove_duplicates:   Remove row/column duplicates, if the timestamp is provided it kees the most recent one,
+                                otherwise the highest rating or interaction value.
+    :param custom_user_item_rating_columns:     Column names for the user_id, item_id and rating value as in the file header
+    :param create_mapper:       True map the IDs into a new interger value, False use the original value
+    :param preinitialized_row_mapper:      Dictionary {originalID: matrix index}  to translate rowIDs into row indices (e.g., userID into user index)
+    :param preinitialized_col_mapper:      Dictionary {originalID: matrix index} to translate rowIDs into row indices (e.g., ItemID into item index)
+    :return:
+    """
+
+    if preinitialized_row_mapper is not None or preinitialized_col_mapper is not None:
+        URM_all_builder = IncrementalSparseMatrix_FilterIDs(preinitialized_col_mapper = preinitialized_col_mapper,
+                                                            preinitialized_row_mapper = preinitialized_row_mapper,
+                                                            on_new_col = on_new_col, on_new_row = on_new_row)
+        URM_timestamp_builder = IncrementalSparseMatrix_FilterIDs(preinitialized_col_mapper = preinitialized_col_mapper,
+                                                                  preinitialized_row_mapper = preinitialized_row_mapper,
+                                                                  on_new_col = on_new_col, on_new_row = on_new_row)
+
+    else:
+        URM_all_builder = IncrementalSparseMatrix(auto_create_col_mapper = create_mapper, auto_create_row_mapper = create_mapper)
+        URM_timestamp_builder = IncrementalSparseMatrix(auto_create_col_mapper = create_mapper, auto_create_row_mapper = create_mapper)
 
     if timestamp:
         dtype={0:str, 1:str, 2:float, 3:float}

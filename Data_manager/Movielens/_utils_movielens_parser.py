@@ -9,129 +9,57 @@ Created on 26/11/19
 import pandas as pd
 
 
-
-def _loadURM_preinitialized_item_id (filePath, header = False, separator="::",
-                                     if_new_user = "add", if_new_item = "ignore",
-                                     item_original_ID_to_index = None,
-                                     user_original_ID_to_index = None):
-
-
-    from Data_manager.IncrementalSparseMatrix import IncrementalSparseMatrix_FilterIDs
-
-    URM_all_builder = IncrementalSparseMatrix_FilterIDs(preinitialized_col_mapper = item_original_ID_to_index,
-                                                    on_new_col = if_new_item,
-                                                    preinitialized_row_mapper = user_original_ID_to_index,
-                                                    on_new_row = if_new_user)
-
-    URM_timestamp_builder = IncrementalSparseMatrix_FilterIDs(preinitialized_col_mapper = item_original_ID_to_index,
-                                                on_new_col = if_new_item,
-                                                preinitialized_row_mapper = user_original_ID_to_index,
-                                                on_new_row = if_new_user)
-
-    if header:
-        df_original = pd.read_csv(filepath_or_buffer=filePath, sep=separator, header= 0 if header else None,
-                        usecols=['userId', 'movieId', 'rating', 'timestamp'],
-                        dtype={'userId':str, 'movieId':str, 'rating':float, 'timestamp':float})
-    else:
-        df_original = pd.read_csv(filepath_or_buffer=filePath, sep=separator, header= 0 if header else None,
-                        dtype={0:str, 1:str, 2:float, 3:float})
-
-        df_original.columns = ['userId', 'movieId', 'rating', 'timestamp']
-
-    # Remove data with rating non valid
-    df_original.drop(df_original[df_original.rating == 0.0].index, inplace=True)
-
-    user_id_list = df_original['userId'].values
-    item_id_list = df_original['movieId'].values
-    rating_list = df_original['rating'].values
-    timestamp_list = df_original['timestamp'].values
-
-    URM_all_builder.add_data_lists(user_id_list, item_id_list, rating_list)
-    URM_timestamp_builder.add_data_lists(user_id_list, item_id_list, timestamp_list)
-
-
-
-    return  URM_all_builder.get_SparseMatrix(), \
-            URM_all_builder.get_column_token_to_id_mapper(), \
-            URM_all_builder.get_row_token_to_id_mapper(),\
-            URM_timestamp_builder.get_SparseMatrix()
-
-
-
-
-
 def _loadICM_genres(genres_path, header=True, separator=',', genresSeparator="|"):
 
-    # Genres
-    from Data_manager.IncrementalSparseMatrix import IncrementalSparseMatrix_FilterIDs
+    ICM_genres_dataframe = pd.read_csv(filepath_or_buffer=genres_path, sep=separator, header=header, dtype={0:str, 1:str, 2:str})
+    ICM_genres_dataframe.columns = ["ItemID", "Title", "GenreList"]
 
-    ICM_builder = IncrementalSparseMatrix_FilterIDs(preinitialized_col_mapper = None, on_new_col = "add",
-                                                    preinitialized_row_mapper = None, on_new_row = "add")
+    # Split GenreList in order to obtain a dataframe with a tag per row
+    ICM_genres_dataframe = pd.DataFrame(ICM_genres_dataframe["GenreList"].str.split(genresSeparator).tolist(),
+                                        index=ICM_genres_dataframe["ItemID"]).stack()
 
+    ICM_genres_dataframe = ICM_genres_dataframe.reset_index()[[0, 'ItemID']]
+    ICM_genres_dataframe.columns = ['FeatureID', 'ItemID']
+    ICM_genres_dataframe = ICM_genres_dataframe[['ItemID', 'FeatureID']]
+    ICM_genres_dataframe["Data"] = 1
 
-    fileHandle = open(genres_path, "r", encoding="latin1")
-    numCells = 0
-
-    if header:
-        fileHandle.readline()
-
-    for line in fileHandle:
-        numCells += 1
-        if (numCells % 1000000 == 0):
-            print("Processed {} cells".format(numCells))
-
-        if (len(line)) > 1:
-            line = line.split(separator)
-
-            line[-1] = line[-1].replace("\n", "")
-
-            movie_id = line[0]
-
-            title = line[1]
-            # In case the title contains commas, it is enclosed in "..."
-            # genre list will always be the last element
-            genreList = line[-1]
-
-            genreList = genreList.split(genresSeparator)
-
-            # Rows movie ID
-            # Cols features
-            ICM_builder.add_single_row(movie_id, genreList, data = 1.0)
+    return ICM_genres_dataframe
 
 
-    fileHandle.close()
 
-    return ICM_builder.get_SparseMatrix(), ICM_builder.get_column_token_to_id_mapper(), ICM_builder.get_row_token_to_id_mapper()
+def _loadURM(URM_path, header=None, separator=','):
+
+    URM_all_dataframe = pd.read_csv(filepath_or_buffer=URM_path, sep=separator, header=header, dtype={0:str, 1:str, 2:float, 3:int})
+    URM_all_dataframe.columns = ["UserID", "ItemID", "Interaction", "Timestamp"]
+
+    URM_timestamp_dataframe = URM_all_dataframe.copy().drop(columns=["Interaction"])
+    URM_all_dataframe = URM_all_dataframe.drop(columns=["Timestamp"])
+    URM_timestamp_dataframe.columns = ["UserID", "ItemID", "Data"]
+    URM_all_dataframe.columns = ["UserID", "ItemID", "Data"]
+
+    return URM_all_dataframe, URM_timestamp_dataframe
 
 
 
 
 
-
-def _loadICM_tags(tags_path, header=True, separator=',', if_new_item = "ignore",
-                  item_original_ID_to_index = None, preinitialized_col_mapper = None):
+def _loadICM_tags(tags_path, header=True, separator=','):
 
     # Tags
     from Data_manager.TagPreprocessing import tagFilterAndStemming
 
-
-    from Data_manager.IncrementalSparseMatrix import IncrementalSparseMatrix_FilterIDs
-
-    ICM_builder = IncrementalSparseMatrix_FilterIDs(preinitialized_col_mapper = preinitialized_col_mapper, on_new_col = "add",
-                                                    preinitialized_row_mapper = item_original_ID_to_index, on_new_row = if_new_item)
-
-
-
     fileHandle = open(tags_path, "r", encoding="latin1")
-    numCells = 0
 
-    if header:
+    if header is not None:
         fileHandle.readline()
 
-    for line in fileHandle:
-        numCells += 1
-        if (numCells % 100000 == 0):
-            print("Processed {} cells".format(numCells))
+    movie_id_list = []
+    tags_lists = []
+
+    for index, line in enumerate(fileHandle):
+
+        if index % 100000 == 0 and index>0:
+            print("Processed {} cells".format(index))
 
         if (len(line)) > 1:
             line = line.split(separator)
@@ -140,22 +68,23 @@ def _loadICM_tags(tags_path, header=True, separator=',', if_new_item = "ignore",
 
             # If a movie has no genre, ignore it
             movie_id = line[1]
-
-            tagList = line[2]
+            this_tag_list = line[2]
 
             # Remove non alphabetical character and split on spaces
-            tagList = tagFilterAndStemming(tagList)
+            this_tag_list = tagFilterAndStemming(this_tag_list)
 
-            # Rows movie ID
-            # Cols features
-            ICM_builder.add_single_row(movie_id, tagList, data = 1.0)
-
+            movie_id_list.append(movie_id)
+            tags_lists.append(this_tag_list)
 
     fileHandle.close()
 
+    ICM_dataframe = pd.DataFrame(tags_lists, index=movie_id_list).stack()
+    ICM_dataframe = ICM_dataframe.reset_index()[["level_0", 0]]
+    ICM_dataframe.columns = ['ItemID', 'FeatureID']
+    ICM_dataframe["Data"] = 1
 
 
-    return ICM_builder.get_SparseMatrix(), ICM_builder.get_column_token_to_id_mapper(), ICM_builder.get_row_token_to_id_mapper()
+    return ICM_dataframe
 
 
 

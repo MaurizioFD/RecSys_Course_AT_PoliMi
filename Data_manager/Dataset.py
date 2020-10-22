@@ -88,17 +88,17 @@ class Dataset(object):
         self.DATASET_NAME = dataset_name
         self.AVAILABLE_URM = URM_dictionary
 
-        if ICM_dictionary is not None:
+        if ICM_dictionary is not None and len(ICM_dictionary)>0:
             self.AVAILABLE_ICM = ICM_dictionary
             self.AVAILABLE_ICM_feature_mapper = ICM_feature_mapper_dictionary
             self._HAS_ICM = True
 
-        if UCM_dictionary is not None:
+        if UCM_dictionary is not None and len(UCM_dictionary)>0:
             self.AVAILABLE_UCM = UCM_dictionary
             self.AVAILABLE_UCM_feature_mapper = UCM_feature_mapper_dictionary
             self._HAS_UCM = True
 
-        if additional_data_mapper is not None:
+        if additional_data_mapper is not None and len(additional_data_mapper)>0:
             self.additional_data_mapper = additional_data_mapper
             self._HAS_additional_mapper = True
 
@@ -220,11 +220,11 @@ class Dataset(object):
 
         self.AVAILABLE_URM = dataIO.load_data(file_name = "dataset_URM")
 
-        if self._HAS_ICM > 0:
+        if self._HAS_ICM:
             self.AVAILABLE_ICM = dataIO.load_data(file_name = "dataset_ICM")
             self.AVAILABLE_ICM_feature_mapper = dataIO.load_data(file_name = "dataset_ICM_mappers")
 
-        if self._HAS_UCM > 0:
+        if self._HAS_UCM:
             self.AVAILABLE_UCM = dataIO.load_data(file_name = "dataset_UCM")
             self.AVAILABLE_UCM_feature_mapper = dataIO.load_data(file_name = "dataset_UCM_mappers")
 
