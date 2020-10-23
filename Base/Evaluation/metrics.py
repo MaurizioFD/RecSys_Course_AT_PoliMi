@@ -868,6 +868,7 @@ class Diversity_MeanInterList(_Metrics_Object):
 
     It can be demonstrated that this metric does not require to compute the common items all possible couples of users have in common
     but rather it is only sensitive to the total amount of time each item has been recommended.
+    Please refer to my PhD. Thesis Appendix B for references "An assessment of reproducibility and methodological issues in neural recommender systems research"
 
     MeanInterList diversity is a function of the square of the probability an item has been recommended to any user, hence
     MeanInterList diversity is equivalent to the Herfindahl index as they measure the same quantity.
