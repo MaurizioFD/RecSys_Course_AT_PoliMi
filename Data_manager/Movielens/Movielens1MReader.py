@@ -6,13 +6,12 @@ Created on 14/09/17
 @author: Maurizio Ferrari Dacrema
 """
 
-
+import pandas as pd
 import zipfile, shutil
-from Data_manager.Dataset import Dataset
 from Data_manager.DataReader import DataReader
 from Data_manager.DataReader_utils import download_from_URL
-from Data_manager.Movielens._utils_movielens_parser import _loadICM_tags, _loadURM_preinitialized_item_id, _loadICM_genres, _loadUCM
-
+from Data_manager.DatasetMapperManager import DatasetMapperManager
+from Data_manager.Movielens._utils_movielens_parser import _loadURM, _loadICM_genres
 
 
 class Movielens1MReader(DataReader):
@@ -39,7 +38,7 @@ class Movielens1MReader(DataReader):
 
         except (FileNotFoundError, zipfile.BadZipFile):
 
-            self._print("Unable to fild data zip file. Downloading...")
+            self._print("Unable to find data zip file. Downloading...")
 
             download_from_URL(self.DATASET_URL, zipFile_path, "ml-1m.zip")
 
@@ -50,46 +49,38 @@ class Movielens1MReader(DataReader):
         UCM_path = dataFile.extract("ml-1m/users.dat", path=zipFile_path + "decompressed/")
         URM_path = dataFile.extract("ml-1m/ratings.dat", path=zipFile_path + "decompressed/")
 
+        self._print("Loading Interactions")
+        URM_all_dataframe, URM_timestamp_dataframe = _loadURM(URM_path, header=None, separator='::')
 
-        self._print("loading genres")
-        ICM_genres, tokenToFeatureMapper_ICM_genres, item_original_ID_to_index = _loadICM_genres(ICM_genre_path, header=True, separator='::', genresSeparator="|")
+        self._print("Loading Item Features genres")
+        ICM_genres_dataframe = _loadICM_genres(ICM_genre_path, header=None, separator='::', genresSeparator="|")
 
-        self._print("loading UCM")
-        UCM_all, tokenToFeatureMapper_UCM_all, user_original_ID_to_index = _loadUCM(UCM_path, header=True, separator='::')
+        self._print("Loading User Features")
+        UCM_dataframe = pd.read_csv(filepath_or_buffer=UCM_path, sep="::", header=None, dtype={0:str, 1:str, 2:str, 3:str, 4:str})
+        UCM_dataframe.columns = ["UserID", "gender", "age_group", "occupation", "zip_code"]
 
-        self._print("loading URM")
-        URM_all, item_original_ID_to_index, user_original_ID_to_index, URM_timestamp = _loadURM_preinitialized_item_id(URM_path, separator="::",
-                                                                                          header = False, if_new_user = "ignore", if_new_item = "ignore",
-                                                                                          item_original_ID_to_index = item_original_ID_to_index,
-                                                                                          user_original_ID_to_index = user_original_ID_to_index)
-        loaded_URM_dict = {"URM_all": URM_all,
-                           "URM_timestamp": URM_timestamp}
-
-        loaded_ICM_dict = {"ICM_genres": ICM_genres}
-        loaded_ICM_mapper_dict = {"ICM_genres": tokenToFeatureMapper_ICM_genres}
-
-        loaded_UCM_dict = {"UCM_all": UCM_all}
-        loaded_UCM_mapper_dict = {"UCM_all": tokenToFeatureMapper_UCM_all}
+        # For each user a list of features
+        UCM_list = [[feature_name + "_" + str(UCM_dataframe[feature_name][index]) for feature_name in ["gender", "age_group", "occupation", "zip_code"]] for index in range(len(UCM_dataframe))]
+        UCM_dataframe = pd.DataFrame(UCM_list, index=UCM_dataframe["UserID"]).stack()
+        UCM_dataframe = UCM_dataframe.reset_index()[[0, 'UserID']]
+        UCM_dataframe.columns = ['FeatureID', 'UserID']
+        UCM_dataframe["Data"] = 1
 
 
+        dataset_manager = DatasetMapperManager()
+        dataset_manager.add_URM(URM_all_dataframe, "URM_all")
+        dataset_manager.add_URM(URM_timestamp_dataframe, "URM_timestamp")
+        dataset_manager.add_ICM(ICM_genres_dataframe, "ICM_genres")
+        dataset_manager.add_UCM(UCM_dataframe, "UCM_all")
 
-        loaded_dataset = Dataset(dataset_name = self._get_dataset_name(),
-                                 URM_dictionary = loaded_URM_dict,
-                                 ICM_dictionary = loaded_ICM_dict,
-                                 ICM_feature_mapper_dictionary = loaded_ICM_mapper_dict,
-                                 UCM_dictionary = loaded_UCM_dict,
-                                 UCM_feature_mapper_dictionary = loaded_UCM_mapper_dict,
-                                 user_original_ID_to_index= user_original_ID_to_index,
-                                 item_original_ID_to_index= item_original_ID_to_index,
-                                 is_implicit = self.IS_IMPLICIT,
-                                 )
-
+        loaded_dataset = dataset_manager.generate_Dataset(dataset_name=self._get_dataset_name(),
+                                                          is_implicit=self.IS_IMPLICIT)
 
         self._print("cleaning temporary files")
 
         shutil.rmtree(zipFile_path + "decompressed", ignore_errors=True)
 
-        self._print("loading complete")
+        self._print("Loading Complete")
 
         return loaded_dataset
 

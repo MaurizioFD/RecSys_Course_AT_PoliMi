@@ -586,7 +586,8 @@ def runParameterSearch_Collaborative(recommender_class, URM_train, URM_train_las
 import os, multiprocessing
 from functools import partial
 
-
+from Data_manager.Movielens.Movielens10MReader import Movielens10MReader
+from Data_manager.split_functions.split_train_validation_random_holdout import split_train_in_two_percentage_global_sample
 
 
 
@@ -603,17 +604,12 @@ def read_data_split_and_search():
         - A _best_result_test file which contains a dictionary with the results, on the test set, of the best solution chosen using the validation set
     """
 
-    from Data_manager.Movielens1M.Movielens1MReader import Movielens1MReader
-    from Data_manager.DataSplitter_k_fold_stratified import DataSplitter_Warm_k_fold
 
+    dataReader = Movielens10MReader()
+    dataset = dataReader.load_data()
 
-    dataset_object = Movielens1MReader()
-
-    dataSplitter = DataSplitter_Warm_k_fold(dataset_object)
-
-    dataSplitter.load_data()
-
-    URM_train, URM_validation, URM_test = dataSplitter.get_holdout_split()
+    URM_train, URM_test = split_train_in_two_percentage_global_sample(dataset.get_URM_all(), train_percentage = 0.80)
+    URM_train, URM_validation = split_train_in_two_percentage_global_sample(URM_train, train_percentage = 0.80)
 
 
     output_folder_path = "result_experiments/SKOPT_prova/"

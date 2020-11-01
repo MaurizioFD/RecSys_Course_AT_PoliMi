@@ -41,6 +41,9 @@ def tagFilter(originalTag):
 
 def tagFilterAndStemming(originalTag):
 
+    if len(originalTag) == 0:
+        return []
+
     # Remove non alphabetical character and split on spaces
     processedTag = re.sub("[^a-zA-Z0-9]", " ", originalTag)
     processedTag = re.sub(" +", " ", processedTag)
@@ -57,7 +60,7 @@ def tagFilterAndStemming(originalTag):
 
         tag_stemmed = stemmer.stem(tag)
 
-        if tag_stemmed not in stopwords_set:
+        if tag_stemmed not in stopwords_set and len(tag_stemmed)>0:
             result.append(tag_stemmed)
 
     return result
