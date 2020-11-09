@@ -8,7 +8,6 @@ Created on 06/01/2018
 
 import subprocess, os, sys, shutil
 
-
 def run_compile_subprocess(file_subfolder, file_to_compile_list):
 
     # Run compile script setting the working directory to ensure the compiled file are contained in the
