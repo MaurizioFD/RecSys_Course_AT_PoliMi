@@ -30,7 +30,7 @@ def do_some_training(URM_train):
         rating = URM_train_coo.data[sample_index]
 
         # Compute prediction
-        items_in_user_profile = URM_train.indices[URM_train.indptr[user_id]:URM_train.indptr[user_id]]
+        items_in_user_profile = URM_train.indices[URM_train.indptr[user_id]:URM_train.indptr[user_id+1]]
         predicted_rating = 0.0
 
         for index in items_in_user_profile:

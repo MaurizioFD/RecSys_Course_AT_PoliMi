@@ -15,6 +15,6 @@ URM_all = data_loaded.get_URM_all()
 URM_train, URM_test = train_test_holdout(URM_all, train_perc = 0.8)
 
 
-from Cython_examples.SLIM_MSE import do_some_training
+from Cython_examples.SLIM_MSE_fastest import train_multiple_epochs
 
-loss, samples_per_second = do_some_training(URM_train)
+train_multiple_epochs(URM_train, 1e-3, 10)

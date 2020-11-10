@@ -35,7 +35,7 @@ def do_some_training(URM_train):
         loss += prediction_error**2
 
         # Update model, in this case the similarity
-        items_in_user_profile = URM_train.indices[URM_train.indptr[user_id]:URM_train.indptr[user_id]]
+        items_in_user_profile = URM_train.indices[URM_train.indptr[user_id]:URM_train.indptr[user_id+1]]
         item_item_S[items_in_user_profile,item_id] += prediction_error * learning_rate
 
         # Print some stats

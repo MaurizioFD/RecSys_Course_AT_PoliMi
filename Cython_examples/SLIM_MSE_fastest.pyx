@@ -7,11 +7,13 @@ Created on 09/11/2020
 import numpy as np
 import time
 
-def do_some_training(URM_train):
+from libc.stdlib cimport rand, srand, RAND_MAX
+
+def train_multiple_epochs(URM_train, learning_rate_input, n_epochs):
 
     URM_train_coo = URM_train.tocoo()
-    n_items = URM_train.shape[1]
-
+    cdef int n_items = URM_train.shape[1]
+    cdef int n_interactions = URM_train.nnz
     cdef int[:] URM_train_row = URM_train_coo.row
     cdef int[:] URM_train_col = URM_train_coo.col
     cdef double[:] URM_train_data = URM_train_coo.data
@@ -19,41 +21,55 @@ def do_some_training(URM_train):
     cdef int[:] URM_train_indptr = URM_train.indptr
 
     cdef double[:,:] item_item_S = np.zeros((n_items, n_items), dtype = np.float)
-    cdef double learning_rate = 1e-6
+    cdef double learning_rate = learning_rate_input
     cdef double loss = 0.0
-    cdef long start_time = time.time()
-    cdef double predicted_rating, prediction_error
-    cdef int[:] items_in_user_profile
-    cdef int index, sample_num
+    cdef long start_time
+    cdef double rating, predicted_rating, prediction_error
+    cdef int start_profile, end_profile
+    cdef int index, sample_num, user_id, item_id, seen_item_id
 
-    for sample_num in range(100000):
+    for n_epoch in range(n_epochs):
 
-        # Randomly pick sample
-        sample_index = np.random.randint(URM_train_coo.nnz)
+        loss = 0.0
+        start_time = time.time()
 
-        user_id = URM_train_row[sample_index]
-        item_id = URM_train_col[sample_index]
-        rating = URM_train_data[sample_index]
+        for sample_num in range(n_interactions):
 
-        # Compute prediction
-        items_in_user_profile = URM_train_indices[URM_train_indptr[user_id]:URM_train_indptr[user_id]]
-        predicted_rating = 0.0
+            # Randomly pick sample
+            index = rand() % n_interactions
 
-        for index in items_in_user_profile:
-            predicted_rating += item_item_S[index,item_id]
+            user_id = URM_train_row[index]
+            item_id = URM_train_col[index]
+            rating = URM_train_data[index]
 
-        # Compute prediction error, or gradient
-        prediction_error = rating - predicted_rating
-        loss += prediction_error**2
+            # Compute prediction
+            start_profile = URM_train_indptr[user_id]
+            end_profile = URM_train_indptr[user_id+1]
+            predicted_rating = 0.0
 
-        # Update model, in this case the similarity
-        for index in items_in_user_profile:
-            item_item_S[index,item_id] += prediction_error * learning_rate
+            for index in range(start_profile, end_profile):
+                seen_item_id = URM_train_indices[index]
+                predicted_rating += item_item_S[seen_item_id,item_id]
 
-        # Print some stats
-        if (sample_num +1)% 5000 == 0:
-            elapsed_time = time.time() - start_time
-            samples_per_second = sample_num/elapsed_time
-            print("Iteration {} in {:.2f} seconds, loss is {:.2f}. Samples per second {:.2f}".format(sample_num+1, elapsed_time, loss/sample_num, samples_per_second))
+            # Compute prediction error, or gradient
+            prediction_error = rating - predicted_rating
+            loss += prediction_error**2
 
-    return loss, samples_per_second
+            # Update model, in this case the similarity
+            for index in range(start_profile, end_profile):
+                seen_item_id = URM_train_indices[index]
+                item_item_S[seen_item_id,item_id] += prediction_error * learning_rate
+
+#             # Print some stats
+#             if (sample_num +1)% 1000000 == 0:
+#                 elapsed_time = time.time() - start_time
+#                 samples_per_second = sample_num/elapsed_time
+#                 print("Iteration {} in {:.2f} seconds, loss is {:.2f}. Samples per second {:.2f}".format(sample_num+1, elapsed_time, loss/sample_num, samples_per_second))
+
+
+        elapsed_time = time.time() - start_time
+        samples_per_second = sample_num/elapsed_time
+
+        print("Epoch {} complete in in {:.2f} seconds, loss is {:.3E}. Samples per second {:.2f}".format(n_epoch+1, time.time() - start_time, loss/sample_num, samples_per_second))
+
+    return np.array(item_item_S), loss/sample_num, samples_per_second
