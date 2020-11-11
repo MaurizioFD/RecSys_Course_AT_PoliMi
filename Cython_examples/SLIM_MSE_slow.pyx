@@ -7,41 +7,52 @@ Created on 09/11/2020
 import numpy as np
 import time
 
-def do_some_training(URM_train):
+def train_multiple_epochs(URM_train, learning_rate_input, n_epochs):
 
     URM_train_coo = URM_train.tocoo()
     n_items = URM_train.shape[1]
+    n_interactions = URM_train.nnz
 
     item_item_S = np.zeros((n_items, n_items), dtype = np.float16)
 
     learning_rate = 1e-6
 
-    loss = 0.0
-    start_time = time.time()
-    for sample_num in range(100000):
 
-        # Randomly pick sample
-        sample_index = np.random.randint(URM_train_coo.nnz)
+    for n_epoch in range(n_epochs):
 
-        user_id = URM_train_coo.row[sample_index]
-        item_id = URM_train_coo.col[sample_index]
-        rating = URM_train_coo.data[sample_index]
+        loss = 0.0
+        start_time = time.time()
 
-        # Compute prediction
-        predicted_rating = URM_train[user_id].dot(item_item_S[:,item_id])[0]
+        for sample_num in range(n_interactions):
 
-        # Compute prediction error, or gradient
-        prediction_error = rating - predicted_rating
-        loss += prediction_error**2
+            # Randomly pick sample
+            sample_index = np.random.randint(URM_train_coo.nnz)
 
-        # Update model, in this case the similarity
-        items_in_user_profile = URM_train.indices[URM_train.indptr[user_id]:URM_train.indptr[user_id+1]]
-        item_item_S[items_in_user_profile,item_id] += prediction_error * learning_rate
+            user_id = URM_train_coo.row[sample_index]
+            item_id = URM_train_coo.col[sample_index]
+            rating = URM_train_coo.data[sample_index]
 
-        # Print some stats
-        if (sample_num +1)% 5000 == 0:
-            elapsed_time = time.time() - start_time
-            samples_per_second = sample_num/elapsed_time
-            print("Iteration {} in {:.2f} seconds, loss is {:.2f}. Samples per second {:.2f}".format(sample_num+1, elapsed_time, loss/sample_num, samples_per_second))
+            # Compute prediction
+            predicted_rating = URM_train[user_id].dot(item_item_S[:,item_id])[0]
 
-    return loss, samples_per_second
+            # Compute prediction error, or gradient
+            prediction_error = rating - predicted_rating
+            loss += prediction_error**2
+
+            # Update model, in this case the similarity
+            items_in_user_profile = URM_train.indices[URM_train.indptr[user_id]:URM_train.indptr[user_id+1]]
+            item_item_S[items_in_user_profile,item_id] += prediction_error * learning_rate
+
+            # Print some stats
+            if (sample_num +1)% 5000 == 0:
+                elapsed_time = time.time() - start_time
+                samples_per_second = sample_num/elapsed_time
+                print("Iteration {} in {:.2f} seconds, loss is {:.2f}. Samples per second {:.2f}".format(sample_num+1, elapsed_time, loss/sample_num, samples_per_second))
+
+
+        elapsed_time = time.time() - start_time
+        samples_per_second = sample_num/elapsed_time
+
+        print("Epoch {} complete in in {:.2f} seconds, loss is {:.3E}. Samples per second {:.2f}".format(n_epoch+1, time.time() - start_time, loss/sample_num, samples_per_second))
+
+    return np.array(item_item_S), loss/sample_num, samples_per_second
