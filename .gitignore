@@ -19,6 +19,11 @@ Data_manager_offline_datasets/**
 **/Cython/*.html
 **/Cython/*.c
 **/Cython/build/*
+**/Cython_examples/*.pyd
+**/Cython_examples/*.so
+**/Cython_examples/*.html
+**/Cython_examples/*.c
+**/Cython_examples/build/*
 
 # Distribution / packaging
 .Python
