@@ -381,13 +381,13 @@ body.cython { font-family: courier; font-size: 12; }
   if (<span class='py_c_api'>PyDict_SetItem</span>(__pyx_d, __pyx_n_s_time, __pyx_t_1) &lt; 0) <span class='error_goto'>__PYX_ERR(0, 8, __pyx_L1_error)</span>
   <span class='pyx_macro_api'>__Pyx_DECREF</span>(__pyx_t_1); __pyx_t_1 = 0;
 </pre><pre class="cython line score-0">&#xA0;<span class="">09</span>: </pre>
-<pre class="cython line score-68" onclick="(function(s){s.display=s.display==='block'?'none':'block'})(this.nextElementSibling.style)">+<span class="">10</span>: <span class="k">def</span> <span class="nf">train_multiple_epochs</span><span class="p">(</span><span class="n">URM_train</span><span class="p">,</span> <span class="n">learning_rate_input</span><span class="p">,</span> <span class="n">n_epochs</span><span class="p">):</span></pre>
-<pre class='cython code score-68 '>/* Python wrapper */
+<pre class="cython line score-69" onclick="(function(s){s.display=s.display==='block'?'none':'block'})(this.nextElementSibling.style)">+<span class="">10</span>: <span class="k">def</span> <span class="nf">train_multiple_epochs</span><span class="p">(</span><span class="n">URM_train</span><span class="p">,</span> <span class="n">learning_rate_input</span><span class="p">,</span> <span class="n">n_epochs</span><span class="p">):</span></pre>
+<pre class='cython code score-69 '>/* Python wrapper */
 static PyObject *__pyx_pw_13SLIM_MSE_slow_1train_multiple_epochs(PyObject *__pyx_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
 static PyMethodDef __pyx_mdef_13SLIM_MSE_slow_1train_multiple_epochs = {"train_multiple_epochs", (PyCFunction)(void*)(PyCFunctionWithKeywords)__pyx_pw_13SLIM_MSE_slow_1train_multiple_epochs, METH_VARARGS|METH_KEYWORDS, 0};
 static PyObject *__pyx_pw_13SLIM_MSE_slow_1train_multiple_epochs(PyObject *__pyx_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
   PyObject *__pyx_v_URM_train = 0;
-  CYTHON_UNUSED PyObject *__pyx_v_learning_rate_input = 0;
+  PyObject *__pyx_v_learning_rate_input = 0;
   PyObject *__pyx_v_n_epochs = 0;
   PyObject *__pyx_r = 0;
   <span class='refnanny'>__Pyx_RefNannyDeclarations</span>
@@ -455,12 +455,12 @@ static PyObject *__pyx_pw_13SLIM_MSE_slow_1train_multiple_epochs(PyObject *__pyx
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_13SLIM_MSE_slow_train_multiple_epochs(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_URM_train, CYTHON_UNUSED PyObject *__pyx_v_learning_rate_input, PyObject *__pyx_v_n_epochs) {
+static PyObject *__pyx_pf_13SLIM_MSE_slow_train_multiple_epochs(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_URM_train, PyObject *__pyx_v_learning_rate_input, PyObject *__pyx_v_n_epochs) {
   PyObject *__pyx_v_URM_train_coo = NULL;
   PyObject *__pyx_v_n_items = NULL;
   PyObject *__pyx_v_n_interactions = NULL;
   PyObject *__pyx_v_item_item_S = NULL;
-  double __pyx_v_learning_rate;
+  PyObject *__pyx_v_learning_rate = NULL;
   PyObject *__pyx_v_n_epoch = NULL;
   PyObject *__pyx_v_loss = NULL;
   PyObject *__pyx_v_start_time = NULL;
@@ -468,7 +468,7 @@ static PyObject *__pyx_pf_13SLIM_MSE_slow_train_multiple_epochs(CYTHON_UNUSED Py
   PyObject *__pyx_v_sample_index = NULL;
   PyObject *__pyx_v_user_id = NULL;
   PyObject *__pyx_v_item_id = NULL;
-  PyObject *__pyx_v_rating = NULL;
+  PyObject *__pyx_v_true_rating = NULL;
   PyObject *__pyx_v_predicted_rating = NULL;
   PyObject *__pyx_v_prediction_error = NULL;
   PyObject *__pyx_v_items_in_user_profile = NULL;
@@ -495,6 +495,7 @@ static PyObject *__pyx_pf_13SLIM_MSE_slow_train_multiple_epochs(CYTHON_UNUSED Py
   <span class='pyx_macro_api'>__Pyx_XDECREF</span>(__pyx_v_n_items);
   <span class='pyx_macro_api'>__Pyx_XDECREF</span>(__pyx_v_n_interactions);
   <span class='pyx_macro_api'>__Pyx_XDECREF</span>(__pyx_v_item_item_S);
+  <span class='pyx_macro_api'>__Pyx_XDECREF</span>(__pyx_v_learning_rate);
   <span class='pyx_macro_api'>__Pyx_XDECREF</span>(__pyx_v_n_epoch);
   <span class='pyx_macro_api'>__Pyx_XDECREF</span>(__pyx_v_loss);
   <span class='pyx_macro_api'>__Pyx_XDECREF</span>(__pyx_v_start_time);
@@ -502,7 +503,7 @@ static PyObject *__pyx_pf_13SLIM_MSE_slow_train_multiple_epochs(CYTHON_UNUSED Py
   <span class='pyx_macro_api'>__Pyx_XDECREF</span>(__pyx_v_sample_index);
   <span class='pyx_macro_api'>__Pyx_XDECREF</span>(__pyx_v_user_id);
   <span class='pyx_macro_api'>__Pyx_XDECREF</span>(__pyx_v_item_id);
-  <span class='pyx_macro_api'>__Pyx_XDECREF</span>(__pyx_v_rating);
+  <span class='pyx_macro_api'>__Pyx_XDECREF</span>(__pyx_v_true_rating);
   <span class='pyx_macro_api'>__Pyx_XDECREF</span>(__pyx_v_predicted_rating);
   <span class='pyx_macro_api'>__Pyx_XDECREF</span>(__pyx_v_prediction_error);
   <span class='pyx_macro_api'>__Pyx_XDECREF</span>(__pyx_v_items_in_user_profile);
@@ -513,7 +514,7 @@ static PyObject *__pyx_pf_13SLIM_MSE_slow_train_multiple_epochs(CYTHON_UNUSED Py
   return __pyx_r;
 }
 /* … */
-  __pyx_tuple__2 = <span class='py_c_api'>PyTuple_Pack</span>(21, __pyx_n_s_URM_train, __pyx_n_s_learning_rate_input, __pyx_n_s_n_epochs, __pyx_n_s_URM_train_coo, __pyx_n_s_n_items, __pyx_n_s_n_interactions, __pyx_n_s_item_item_S, __pyx_n_s_learning_rate, __pyx_n_s_n_epoch, __pyx_n_s_loss, __pyx_n_s_start_time, __pyx_n_s_sample_num, __pyx_n_s_sample_index, __pyx_n_s_user_id, __pyx_n_s_item_id, __pyx_n_s_rating, __pyx_n_s_predicted_rating, __pyx_n_s_prediction_error, __pyx_n_s_items_in_user_profile, __pyx_n_s_elapsed_time, __pyx_n_s_samples_per_second);<span class='error_goto'> if (unlikely(!__pyx_tuple__2)) __PYX_ERR(0, 10, __pyx_L1_error)</span>
+  __pyx_tuple__2 = <span class='py_c_api'>PyTuple_Pack</span>(21, __pyx_n_s_URM_train, __pyx_n_s_learning_rate_input, __pyx_n_s_n_epochs, __pyx_n_s_URM_train_coo, __pyx_n_s_n_items, __pyx_n_s_n_interactions, __pyx_n_s_item_item_S, __pyx_n_s_learning_rate, __pyx_n_s_n_epoch, __pyx_n_s_loss, __pyx_n_s_start_time, __pyx_n_s_sample_num, __pyx_n_s_sample_index, __pyx_n_s_user_id, __pyx_n_s_item_id, __pyx_n_s_true_rating, __pyx_n_s_predicted_rating, __pyx_n_s_prediction_error, __pyx_n_s_items_in_user_profile, __pyx_n_s_elapsed_time, __pyx_n_s_samples_per_second);<span class='error_goto'> if (unlikely(!__pyx_tuple__2)) __PYX_ERR(0, 10, __pyx_L1_error)</span>
   <span class='refnanny'>__Pyx_GOTREF</span>(__pyx_tuple__2);
   <span class='refnanny'>__Pyx_GIVEREF</span>(__pyx_tuple__2);
 /* … */
@@ -592,8 +593,9 @@ static PyObject *__pyx_pf_13SLIM_MSE_slow_train_multiple_epochs(CYTHON_UNUSED Py
   __pyx_v_item_item_S = __pyx_t_5;
   __pyx_t_5 = 0;
 </pre><pre class="cython line score-0">&#xA0;<span class="">17</span>: </pre>
-<pre class="cython line score-0" onclick="(function(s){s.display=s.display==='block'?'none':'block'})(this.nextElementSibling.style)">+<span class="">18</span>:     <span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">1e-6</span></pre>
-<pre class='cython code score-0 '>  __pyx_v_learning_rate = 1e-6;
+<pre class="cython line score-1" onclick="(function(s){s.display=s.display==='block'?'none':'block'})(this.nextElementSibling.style)">+<span class="">18</span>:     <span class="n">learning_rate</span> <span class="o">=</span> <span class="n">learning_rate_input</span></pre>
+<pre class='cython code score-1 '>  <span class='pyx_macro_api'>__Pyx_INCREF</span>(__pyx_v_learning_rate_input);
+  __pyx_v_learning_rate = __pyx_v_learning_rate_input;
 </pre><pre class="cython line score-0">&#xA0;<span class="">19</span>: </pre>
 <pre class="cython line score-0">&#xA0;<span class="">20</span>: </pre>
 <pre class="cython line score-46" onclick="(function(s){s.display=s.display==='block'?'none':'block'})(this.nextElementSibling.style)">+<span class="">21</span>:     <span class="k">for</span> <span class="n">n_epoch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_epochs</span><span class="p">):</span></pre>
@@ -768,13 +770,13 @@ static PyObject *__pyx_pf_13SLIM_MSE_slow_train_multiple_epochs(CYTHON_UNUSED Py
       <span class='pyx_macro_api'>__Pyx_DECREF</span>(__pyx_t_3); __pyx_t_3 = 0;
       <span class='pyx_macro_api'>__Pyx_XDECREF_SET</span>(__pyx_v_item_id, __pyx_t_5);
       __pyx_t_5 = 0;
-</pre><pre class="cython line score-6" onclick="(function(s){s.display=s.display==='block'?'none':'block'})(this.nextElementSibling.style)">+<span class="">33</span>:             <span class="n">rating</span> <span class="o">=</span> <span class="n">URM_train_coo</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">sample_index</span><span class="p">]</span></pre>
+</pre><pre class="cython line score-6" onclick="(function(s){s.display=s.display==='block'?'none':'block'})(this.nextElementSibling.style)">+<span class="">33</span>:             <span class="n">true_rating</span> <span class="o">=</span> <span class="n">URM_train_coo</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">sample_index</span><span class="p">]</span></pre>
 <pre class='cython code score-6 '>      __pyx_t_5 = <span class='pyx_c_api'>__Pyx_PyObject_GetAttrStr</span>(__pyx_v_URM_train_coo, __pyx_n_s_data);<span class='error_goto'> if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 33, __pyx_L1_error)</span>
       <span class='refnanny'>__Pyx_GOTREF</span>(__pyx_t_5);
       __pyx_t_3 = <span class='pyx_c_api'>__Pyx_PyObject_GetItem</span>(__pyx_t_5, __pyx_v_sample_index);<span class='error_goto'> if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 33, __pyx_L1_error)</span>
       <span class='refnanny'>__Pyx_GOTREF</span>(__pyx_t_3);
       <span class='pyx_macro_api'>__Pyx_DECREF</span>(__pyx_t_5); __pyx_t_5 = 0;
-      <span class='pyx_macro_api'>__Pyx_XDECREF_SET</span>(__pyx_v_rating, __pyx_t_3);
+      <span class='pyx_macro_api'>__Pyx_XDECREF_SET</span>(__pyx_v_true_rating, __pyx_t_3);
       __pyx_t_3 = 0;
 </pre><pre class="cython line score-0">&#xA0;<span class="">34</span>: </pre>
 <pre class="cython line score-0">&#xA0;<span class="">35</span>:             <span class="c"># Compute prediction</span></pre>
@@ -822,8 +824,8 @@ static PyObject *__pyx_pf_13SLIM_MSE_slow_train_multiple_epochs(CYTHON_UNUSED Py
   <span class='refnanny'>__Pyx_GIVEREF</span>(__pyx_slice_);
 </pre><pre class="cython line score-0">&#xA0;<span class="">37</span>: </pre>
 <pre class="cython line score-0">&#xA0;<span class="">38</span>:             <span class="c"># Compute prediction error, or gradient</span></pre>
-<pre class="cython line score-6" onclick="(function(s){s.display=s.display==='block'?'none':'block'})(this.nextElementSibling.style)">+<span class="">39</span>:             <span class="n">prediction_error</span> <span class="o">=</span> <span class="n">rating</span> <span class="o">-</span> <span class="n">predicted_rating</span></pre>
-<pre class='cython code score-6 '>      __pyx_t_4 = <span class='py_c_api'>PyNumber_Subtract</span>(__pyx_v_rating, __pyx_v_predicted_rating);<span class='error_goto'> if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 39, __pyx_L1_error)</span>
+<pre class="cython line score-6" onclick="(function(s){s.display=s.display==='block'?'none':'block'})(this.nextElementSibling.style)">+<span class="">39</span>:             <span class="n">prediction_error</span> <span class="o">=</span> <span class="n">true_rating</span> <span class="o">-</span> <span class="n">predicted_rating</span></pre>
+<pre class='cython code score-6 '>      __pyx_t_4 = <span class='py_c_api'>PyNumber_Subtract</span>(__pyx_v_true_rating, __pyx_v_predicted_rating);<span class='error_goto'> if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 39, __pyx_L1_error)</span>
       <span class='refnanny'>__Pyx_GOTREF</span>(__pyx_t_4);
       <span class='pyx_macro_api'>__Pyx_XDECREF_SET</span>(__pyx_v_prediction_error, __pyx_t_4);
       __pyx_t_4 = 0;
@@ -860,7 +862,7 @@ static PyObject *__pyx_pf_13SLIM_MSE_slow_train_multiple_epochs(CYTHON_UNUSED Py
       <span class='pyx_macro_api'>__Pyx_DECREF</span>(__pyx_t_11); __pyx_t_11 = 0;
       <span class='pyx_macro_api'>__Pyx_XDECREF_SET</span>(__pyx_v_items_in_user_profile, __pyx_t_5);
       __pyx_t_5 = 0;
-</pre><pre class="cython line score-36" onclick="(function(s){s.display=s.display==='block'?'none':'block'})(this.nextElementSibling.style)">+<span class="">44</span>:             <span class="n">item_item_S</span><span class="p">[</span><span class="n">items_in_user_profile</span><span class="p">,</span><span class="n">item_id</span><span class="p">]</span> <span class="o">+=</span> <span class="n">prediction_error</span> <span class="o">*</span> <span class="n">learning_rate</span></pre>
+</pre><pre class="cython line score-36" onclick="(function(s){s.display=s.display==='block'?'none':'block'})(this.nextElementSibling.style)">+<span class="">44</span>:             <span class="n">item_item_S</span><span class="p">[</span><span class="n">items_in_user_profile</span><span class="p">,</span><span class="n">item_id</span><span class="p">]</span> <span class="o">+=</span> <span class="n">learning_rate</span> <span class="o">*</span> <span class="n">prediction_error</span> <span class="o">*</span> <span class="n">true_rating</span></pre>
 <pre class='cython code score-36 '>      __pyx_t_5 = <span class='py_c_api'>PyTuple_New</span>(2);<span class='error_goto'> if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 44, __pyx_L1_error)</span>
       <span class='refnanny'>__Pyx_GOTREF</span>(__pyx_t_5);
       <span class='pyx_macro_api'>__Pyx_INCREF</span>(__pyx_v_items_in_user_profile);
@@ -871,9 +873,9 @@ static PyObject *__pyx_pf_13SLIM_MSE_slow_train_multiple_epochs(CYTHON_UNUSED Py
       <span class='py_macro_api'>PyTuple_SET_ITEM</span>(__pyx_t_5, 1, __pyx_v_item_id);
       __pyx_t_11 = <span class='pyx_c_api'>__Pyx_PyObject_GetItem</span>(__pyx_v_item_item_S, __pyx_t_5);<span class='error_goto'> if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 44, __pyx_L1_error)</span>
       <span class='refnanny'>__Pyx_GOTREF</span>(__pyx_t_11);
-      __pyx_t_10 = <span class='py_c_api'>PyFloat_FromDouble</span>(__pyx_v_learning_rate);<span class='error_goto'> if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 44, __pyx_L1_error)</span>
+      __pyx_t_10 = <span class='py_c_api'>PyNumber_Multiply</span>(__pyx_v_learning_rate, __pyx_v_prediction_error);<span class='error_goto'> if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 44, __pyx_L1_error)</span>
       <span class='refnanny'>__Pyx_GOTREF</span>(__pyx_t_10);
-      __pyx_t_3 = <span class='py_c_api'>PyNumber_Multiply</span>(__pyx_v_prediction_error, __pyx_t_10);<span class='error_goto'> if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 44, __pyx_L1_error)</span>
+      __pyx_t_3 = <span class='py_c_api'>PyNumber_Multiply</span>(__pyx_t_10, __pyx_v_true_rating);<span class='error_goto'> if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 44, __pyx_L1_error)</span>
       <span class='refnanny'>__Pyx_GOTREF</span>(__pyx_t_3);
       <span class='pyx_macro_api'>__Pyx_DECREF</span>(__pyx_t_10); __pyx_t_10 = 0;
       __pyx_t_10 = <span class='py_c_api'>PyNumber_InPlaceAdd</span>(__pyx_t_11, __pyx_t_3);<span class='error_goto'> if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 44, __pyx_L1_error)</span>

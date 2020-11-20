@@ -15,7 +15,7 @@ def train_multiple_epochs(URM_train, learning_rate_input, n_epochs):
 
     item_item_S = np.zeros((n_items, n_items), dtype = np.float16)
 
-    learning_rate = 1e-6
+    learning_rate = learning_rate_input
 
 
     for n_epoch in range(n_epochs):
@@ -30,18 +30,18 @@ def train_multiple_epochs(URM_train, learning_rate_input, n_epochs):
 
             user_id = URM_train_coo.row[sample_index]
             item_id = URM_train_coo.col[sample_index]
-            rating = URM_train_coo.data[sample_index]
+            true_rating = URM_train_coo.data[sample_index]
 
             # Compute prediction
             predicted_rating = URM_train[user_id].dot(item_item_S[:,item_id])[0]
 
             # Compute prediction error, or gradient
-            prediction_error = rating - predicted_rating
+            prediction_error = true_rating - predicted_rating
             loss += prediction_error**2
 
             # Update model, in this case the similarity
             items_in_user_profile = URM_train.indices[URM_train.indptr[user_id]:URM_train.indptr[user_id+1]]
-            item_item_S[items_in_user_profile,item_id] += prediction_error * learning_rate
+            item_item_S[items_in_user_profile,item_id] += learning_rate * prediction_error * true_rating
 
             # Print some stats
             if (sample_num +1)% 5000 == 0:
