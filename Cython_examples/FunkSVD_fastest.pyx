@@ -77,13 +77,13 @@ def train_multiple_epochs(URM_train, learning_rate_input, n_epochs):
 #             # Print some stats
 #             if (sample_num +1)% 1000000 == 0:
 #                 elapsed_time = time.time() - start_time
-#                 samples_per_second = sample_num/elapsed_time
-#                 print("Iteration {} in {:.2f} seconds, loss is {:.2f}. Samples per second {:.2f}".format(sample_num+1, elapsed_time, loss/sample_num, samples_per_second))
+#                 samples_per_second = (sample_num+1)/elapsed_time
+#                 print("Iteration {} in {:.2f} seconds, loss is {:.2f}. Samples per second {:.2f}".format(sample_num+1, elapsed_time, loss/(sample_num+1), samples_per_second))
 
 
         elapsed_time = time.time() - start_time
-        samples_per_second = sample_num/elapsed_time
+        samples_per_second = (sample_num+1)/elapsed_time
 
-        print("Epoch {} complete in in {:.2f} seconds, loss is {:.3E}. Samples per second {:.2f}".format(n_epoch+1, time.time() - start_time, loss/sample_num, samples_per_second))
+        print("Epoch {} complete in in {:.2f} seconds, loss is {:.3E}. Samples per second {:.2f}".format(n_epoch+1, time.time() - start_time, loss/(sample_num+1), samples_per_second))
 
-    return np.array(user_factors), np.array(item_factors), loss, samples_per_second
+    return np.array(user_factors), np.array(item_factors), loss/(sample_num+1), samples_per_second

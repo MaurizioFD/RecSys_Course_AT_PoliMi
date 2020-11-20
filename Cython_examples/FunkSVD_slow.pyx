@@ -45,7 +45,7 @@ def do_some_training(URM_train):
         # Print some stats
         if (sample_num +1)% 100000 == 0:
             elapsed_time = time.time() - start_time
-            samples_per_second = sample_num/elapsed_time
-            print("Iteration {} in {:.2f} seconds, loss is {:.2f}. Samples per second {:.2f}".format(sample_num+1, elapsed_time, loss/sample_num, samples_per_second))
+            samples_per_second = (sample_num+1)/elapsed_time
+            print("Iteration {} in {:.2f} seconds, loss is {:.2f}. Samples per second {:.2f}".format(sample_num+1, elapsed_time, loss/(sample_num+1), samples_per_second))
 
-    return loss, samples_per_second
+    return loss/(sample_num+1), samples_per_second
