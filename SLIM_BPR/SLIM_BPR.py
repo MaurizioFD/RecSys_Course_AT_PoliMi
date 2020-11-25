@@ -22,7 +22,7 @@ class SLIM_BPR(BaseRecommender):
     """
 
     def __init__(self, URM_train, lambda_i = 0.0025, lambda_j = 0.00025, learning_rate = 0.05):
-        super(SLIM_BPR, self).__init__()
+        super(SLIM_BPR, self).__init__(URM_train)
 
         self.URM_train = URM_train
         self.n_users = URM_train.shape[0]
