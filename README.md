@@ -1,7 +1,7 @@
 # RecSys Course @ Politecnico di Milano
 This is the official repository for the 2019 Recommender Systems course at Polimi.
 
-Developed by <a href="https://mauriziofd.github.io/" target="_blank">Maurizio Ferrari Dacrema</a>, PhD candidate at Politecnico di Milano. See our [website](http://recsys.deib.polimi.it/) for more information on our research group and available thesis.
+Developed by <a href="https://mauriziofd.github.io/" target="_blank">Maurizio Ferrari Dacrema</a>, Postdoc researcher at Politecnico di Milano. See our [website](http://recsys.deib.polimi.it/) for more information on our research group and available thesis.
 The introductory slides are available [here](slides/Introduction%20and%20Materials%20for%20RecSys%20Practice%20Sessions.pdf). 
 For Installation instructions see the following section [Installation](#Installation).
 
@@ -20,8 +20,8 @@ For Installation instructions see the following section [Installation](#Installa
  - Item-based KNN content
  - User-based KNN
  - PureSVD: Matrix factorization applied using the simple SVD decomposition of the URM
- - WRMF or IALS: Matrix factorization developed for implicit interactions
- - P3alpha, RP3beta: graph based algorithms modelling a random walk and representing the item-item similarity as a transition probability
+ - WRMF or IALS: Matrix factorization developed for implicit interactions (Papers: <a href="http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.306.4684&rep=rep1&type=pdf" target="_blank">WRMF</a>, <a href="http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.167.5120&rep=rep1&type=pdf" target="_blank">IALS</a>)
+ - P3alpha, RP3beta: graph based algorithms modelling a random walk and representing the item-item similarity as a transition probability (Papers: <a href="https://dl.acm.org/doi/abs/10.1145/2567948.2579244" target="_blank">P3alpha</a>, <a href="https://dl.acm.org/doi/10.1145/2955101" target="_blank">RP3beta</a>)
  - SLIM ElasticNet Item-item similarity matrix machine learning algorithm optimizing prediction error (MSE)
  
  
@@ -60,30 +60,32 @@ First we suggest you create an environment for this project using virtualenv (or
 First checkout this repository, then enter in the repository folder and run this commands to create and activate a new environment:
 
 If you are using virtualenv:
-```Python
+```console
 virtualenv -p python3 RecSysFramework
 source RecSysFramework/bin/activate
 ```
 If you are using conda:
-```Python
+```console
 conda create -n RecSysFramework python=3.6 anaconda
-source activate RecSysFramework
+conda activate RecSysFramework
 ```
 
-Then install all the requirements and dependencies
-```Python
+Then install all the requirements and dependencies using the following command.
+```console
 pip install -r requirements.txt
 ```
 
-In order to compile you must have installed: _gcc_ and _python3 dev_, which can be installed with the following commands:
-```Python
+At this point you have to compile all Cython algorithms.
+In order to compile you must first have installed: _gcc_ and _python3 dev_. Under Linux those can be installed with the following commands:
+```console
 sudo apt install gcc 
 sudo apt-get install python3-dev
 ```
+If you are using Windows as operating system, the installation procedure is a bit more complex. You may refer to [THIS](https://github.com/cython/cython/wiki/InstallingOnWindows) guide.
 
-At this point you can compile all Cython algorithms by running the following command. The script will compile within the current active environment. The code has been developed for Linux and Windows platforms. During the compilation you may see some warnings. 
+Now you can compile all Cython algorithms by running the following command. The script will compile within the current active environment. The code has been developed for Linux and Windows platforms. During the compilation you may see some warnings. 
  
-```Python
+```console
 python run_compile_all_cython.py
 ```
 
