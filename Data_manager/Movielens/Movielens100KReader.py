@@ -57,7 +57,7 @@ class Movielens100KReader(DataReader):
         loaded_dataset = dataset_manager.generate_Dataset(dataset_name=self._get_dataset_name(),
                                                           is_implicit=self.IS_IMPLICIT)
 
-        self._print("cleaning temporary files")
+        self._print("Cleaning Temporary Files")
 
         shutil.rmtree(zipFile_path + "decompressed", ignore_errors=True)
 

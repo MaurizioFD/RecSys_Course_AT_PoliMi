@@ -8,7 +8,7 @@ Created on 12/01/18
 
 import scipy.sparse as sps
 import numpy as np
-from Base.DataIO import DataIO
+from Recommenders.DataIO import DataIO
 
 from Data_manager.DataSplitter import DataSplitter as _DataSplitter
 from Data_manager.DataReader import DataReader as _DataReader
@@ -193,7 +193,7 @@ class DataSplitter_leave_k_out(_DataSplitter):
             user_to_preserve = user_interactions >= min_user_interactions
             self.removed_cold_users = np.logical_not(user_to_preserve)
 
-            self._print("Removing {} ({:.2f} %) of {} users because they have less than the {} interactions required for {} splits ({} for test [and validation if requested] +1 for train)".format(
+            self._print("Removing {} ({:4.1f}%) of {} users because they have less than the {} interactions required for {} splits ({} for test [and validation if requested] +1 for train)".format(
                  URM.shape[0] - user_to_preserve.sum(), (1-user_to_preserve.sum()/URM.shape[0])*100, URM.shape[0], min_user_interactions, split_number, self.k_out_value))
 
             URM = URM[user_to_preserve,:]

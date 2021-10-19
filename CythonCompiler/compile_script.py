@@ -43,6 +43,8 @@ ext_modules = Extension(extensionName,
                 include_dirs=[numpy.get_include(),],
                 )
 
+ext_modules.cython_directives = {'language_level': '3'}
+
 setup(
     cmdclass={'build_ext': build_ext},
     ext_modules=[ext_modules]

@@ -8,7 +8,7 @@ Created on 22/11/18
 
 import numpy as np
 import time, sys, os
-from Base.Recommender_utils import check_matrix
+from Recommenders.Recommender_utils import check_matrix
 import  scipy.sparse as sps
 
 

@@ -9,7 +9,7 @@ Created on 26/11/19
 import numpy as np
 import scipy.sparse as sps
 
-from Base.DataIO import DataIO
+from Recommenders.DataIO import DataIO
 from Data_manager.DataReader_utils import reconcile_mapper_with_removed_tokens, remove_features
 from Data_manager.data_consistency_check import assert_URM_ICM_mapper_consistency
 from Data_manager.DataReader_utils import compute_density

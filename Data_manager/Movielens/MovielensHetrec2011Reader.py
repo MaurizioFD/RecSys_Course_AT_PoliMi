@@ -64,7 +64,7 @@ class MovielensHetrec2011Reader(DataReader):
                                                           is_implicit=self.IS_IMPLICIT)
 
 
-        self._print("cleaning temporary files")
+        self._print("Cleaning Temporary Files")
 
         shutil.rmtree(zipFile_path + "decompressed", ignore_errors=True)
 

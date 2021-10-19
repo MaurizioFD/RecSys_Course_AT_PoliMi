@@ -15,20 +15,17 @@ if __name__ == '__main__':
     # cython_file_list = glob.glob('**/*.pyx', recursive=True)
 
     subfolder_to_compile_list = [
-        "MatrixFactorization",
-        "Cython_examples",
-        "Base/Similarity",
-        "SLIM_BPR",
+        "Recommenders/MatrixFactorization",
+        "Recommenders/Similarity",
+        "Recommenders/SLIM",
+        "Recommenders/FeatureWeighting",
     ]
 
 
     cython_file_list = []
 
     for subfolder_to_compile in subfolder_to_compile_list:
-        if subfolder_to_compile == "Cython_examples":
-            cython_file_list.extend(glob.glob('{}/*.pyx'.format(subfolder_to_compile), recursive=True))
-        else:
-            cython_file_list.extend(glob.glob('{}/Cython/*.pyx'.format(subfolder_to_compile), recursive=True))
+        cython_file_list.extend(glob.glob('{}/Cython/*.pyx'.format(subfolder_to_compile), recursive=True))
 
 
     print("run_compile_all_cython: Found {} Cython files in {} folders...".format(len(cython_file_list), len(subfolder_to_compile_list)))
