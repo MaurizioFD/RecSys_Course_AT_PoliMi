@@ -9,6 +9,7 @@ __pycache__/
 # DATA FILES
 Data_manager_split_datasets/**
 Data_manager_offline_datasets/**
+result_experiments/**
 
 **/.pytest_cache/*
 
