@@ -54,20 +54,14 @@ The code has beend developed for Linux and Windows.
 
 ## Installation
 
-Note that this repository requires Python 3.6
+Note that this repository requires Python 3.8
 
-First we suggest you create an environment for this project using virtualenv (or another tool like conda)
+First we suggest you create an environment for this project using conda
 
 First checkout this repository, then enter in the repository folder and run this commands to create and activate a new environment:
 
-If you are using virtualenv:
 ```console
-virtualenv -p python3 RecSysFramework
-source RecSysFramework/bin/activate
-```
-If you are using conda:
-```console
-conda create -n RecSysFramework python=3.6 anaconda
+conda create -n RecSysFramework python=3.8 anaconda
 conda activate RecSysFramework
 ```
 
