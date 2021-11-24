@@ -18,7 +18,7 @@ from functools import partial
 from Data_manager.Movielens.Movielens1MReader import Movielens1MReader
 from Data_manager.split_functions.split_train_validation_random_holdout import split_train_in_two_percentage_global_sample
 
-from HyperparameterTuning.run_hyperparameter_search import runHyperparameterSearch_Collaborative
+from HyperparameterTuning.run_hyperparameter_search import runHyperparameterSearch_Collaborative, runHyperparameterSearch_Content, runHyperparameterSearch_Hybrid
 
 
 def read_data_split_and_search():
@@ -47,11 +47,6 @@ def read_data_split_and_search():
     # If directory does not exist, create
     if not os.path.exists(output_folder_path):
         os.makedirs(output_folder_path)
-
-
-
-
-
 
 
     collaborative_algorithm_list = [
@@ -120,6 +115,62 @@ def read_data_split_and_search():
     #
 
 
+
+
+    ################################################################################################
+    ###### Content Baselines
+
+    for ICM_name, ICM_object in dataset.get_loaded_ICM_dict().items():
+
+        try:
+
+            runHyperparameterSearch_Content(ItemKNNCBFRecommender,
+                                        URM_train = URM_train,
+                                        URM_train_last_test = URM_train + URM_validation,
+                                        metric_to_optimize = metric_to_optimize,
+                                        cutoff_to_optimize = cutoff_to_optimize,
+                                        evaluator_validation = evaluator_validation,
+                                        evaluator_test = evaluator_test,
+                                        output_folder_path = output_folder_path,
+                                        parallelizeKNN = True,
+                                        allow_weighting = True,
+                                        resume_from_saved = True,
+                                        similarity_type_list = ["cosine"],
+                                        ICM_name = ICM_name,
+                                        ICM_object = ICM_object.copy(),
+                                        n_cases = n_cases,
+                                        n_random_starts = n_random_starts)
+
+        except Exception as e:
+
+            print("On CBF recommender for ICM {} Exception {}".format(ICM_name, str(e)))
+            traceback.print_exc()
+
+
+        try:
+
+            runHyperparameterSearch_Hybrid(ItemKNN_CFCBF_Hybrid_Recommender,
+                                        URM_train = URM_train,
+                                        URM_train_last_test = URM_train + URM_validation,
+                                        metric_to_optimize = metric_to_optimize,
+                                        cutoff_to_optimize = cutoff_to_optimize,
+                                        evaluator_validation = evaluator_validation,
+                                        evaluator_test = evaluator_test,
+                                        output_folder_path = output_folder_path,
+                                        parallelizeKNN = True,
+                                        allow_weighting = True,
+                                        resume_from_saved = True,
+                                        similarity_type_list = ["cosine"],
+                                        ICM_name = ICM_name,
+                                        ICM_object = ICM_object.copy(),
+                                        n_cases = n_cases,
+                                        n_random_starts = n_random_starts)
+
+
+        except Exception as e:
+
+            print("On recommender {} Exception {}".format(ItemKNN_CFCBF_Hybrid_Recommender, str(e)))
+            traceback.print_exc()
 
 
 
