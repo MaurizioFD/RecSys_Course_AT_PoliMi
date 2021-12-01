@@ -106,13 +106,13 @@ def _create_empty_metrics_dict(cutoff_list, n_items, n_users, URM_train, URM_tes
                 cutoff_dict[metric.value] = HIT_RATE()
 
             elif metric == EvaluatorMetrics.RATIO_DIVERSITY_GINI:
-                cutoff_dict[metric.value] = Ratio_Diversity_Gini(URM_train, ignore_users)
+                cutoff_dict[metric.value] = Ratio_Diversity_Gini(URM_train, ignore_items)
 
             elif metric == EvaluatorMetrics.RATIO_DIVERSITY_HERFINDAHL:
-                cutoff_dict[metric.value] = Ratio_Diversity_Herfindahl(URM_train, ignore_users)
+                cutoff_dict[metric.value] = Ratio_Diversity_Herfindahl(URM_train, ignore_items)
 
             elif metric == EvaluatorMetrics.RATIO_SHANNON_ENTROPY:
-                cutoff_dict[metric.value] = Ratio_Shannon_Entropy(URM_train, ignore_users)
+                cutoff_dict[metric.value] = Ratio_Shannon_Entropy(URM_train, ignore_items)
 
             elif metric == EvaluatorMetrics.RATIO_AVERAGE_POPULARITY:
                 cutoff_dict[metric.value] = Ratio_AveragePopularity(URM_train)
