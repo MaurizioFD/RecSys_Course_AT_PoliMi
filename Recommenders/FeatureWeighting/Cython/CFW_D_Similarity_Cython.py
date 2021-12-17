@@ -105,7 +105,7 @@ class CFW_D_Similarity_Cython(BaseItemCBFRecommender, BaseItemSimilarityMatrixRe
 
 
         # Import compiled module
-        from FeatureWeighting.Cython.CFW_D_Similarity_Cython_SGD import CFW_D_Similarity_Cython_SGD
+        from Recommenders.FeatureWeighting.Cython.CFW_D_Similarity_Cython_SGD import CFW_D_Similarity_Cython_SGD
 
         self.show_max_performance = show_max_performance
         self.normalize_similarity = normalize_similarity
@@ -207,10 +207,10 @@ class CFW_D_Similarity_Cython(BaseItemCBFRecommender, BaseItemSimilarityMatrixRe
         S_matrix_contentKNN = check_matrix(S_matrix_contentKNN, "csr")
 
 
-        self.write_log("Collaborative S density: {:.2E}, nonzero cells {}".format(
+        self._print("Collaborative S density: {:.2E}, nonzero cells {}".format(
             self.S_matrix_target.nnz/self.S_matrix_target.shape[0]**2, self.S_matrix_target.nnz))
 
-        self.write_log("Content S density: {:.2E}, nonzero cells {}".format(
+        self._print("Content S density: {:.2E}, nonzero cells {}".format(
             S_matrix_contentKNN.nnz/S_matrix_contentKNN.shape[0]**2, S_matrix_contentKNN.nnz))
 
 
@@ -304,7 +304,7 @@ class CFW_D_Similarity_Cython(BaseItemCBFRecommender, BaseItemSimilarityMatrixRe
                 start_time_batch = time.time()
 
 
-        self.write_log("Content S structure has {} out of {} ({:4.1f}%) nonzero collaborative cells".format(
+        self._print("Content S structure has {} out of {} ({:4.1f}%) nonzero collaborative cells".format(
             num_common_coordinates, S_matrix_contentKNN.nnz, num_common_coordinates/S_matrix_contentKNN.nnz*100))
 
 
@@ -321,59 +321,10 @@ class CFW_D_Similarity_Cython(BaseItemCBFRecommender, BaseItemSimilarityMatrixRe
         collaborative_nnz = self.S_matrix_target.nnz
         collaborative_sum = sum(self.S_matrix_target.data)
 
-        self.write_log("Nonzero collaborative cell sum is: {:.2E}, average is: {:.2E}, "
+        self._print("Nonzero collaborative cell sum is: {:.2E}, average is: {:.2E}, "
                       "average over all collaborative data is {:.2E}".format(
                       data_sum, data_sum/data_nnz, collaborative_sum/collaborative_nnz))
 
-        # if self.evaluator_object is not None and self.show_max_performance:
-        #     self.computeMaxTheoreticalPerformance()
-        #
-        #
-    #
-    #
-    # def computeMaxTheoreticalPerformance(self):
-    #
-    #     # Max performance would be if we were able to learn the content matrix having for each non-zero cell exactly
-    #     # the value that appears in the collaborative similarity
-    #
-    #     print(self.RECOMMENDER_NAME + ": Computing collaborative performance")
-    #
-    #     recommender = ItemKNNCustomSimilarityRecommender()
-    #     recommender.fit(self.S_matrix_target, self.URM_train)
-    #
-    #     results_run = self.evaluator_object(recommender)
-    #
-    #     self.writeLog(self.RECOMMENDER_NAME + ": Collaborative performance is: {}".format(results_run))
-    #
-    #
-    #     print(self.RECOMMENDER_NAME + ": Computing top structural performance")
-    #
-    #     n_items = self.ICM.shape[0]
-    #
-    #     S_optimal = sps.csr_matrix((self.data_list, (self.row_list, self.col_list)), shape=(n_items, n_items))
-    #     S_optimal.eliminate_zeros()
-    #
-    #     recommender = ItemKNNCustomSimilarityRecommender()
-    #     recommender.fit(S_optimal, self.URM_train)
-    #
-    #     results_run = self.evaluator_object(recommender)
-    #
-    #     self.writeLog(self.RECOMMENDER_NAME + ": Top structural performance is: {}".format(results_run))
-
-
-
-    def write_log(self, string):
-
-        string = self.RECOMMENDER_NAME + ": " + string
-
-        if self.verbose:
-            print(string)
-            sys.stdout.flush()
-            sys.stderr.flush()
-
-        if self.log_file is not None:
-            self.log_file.write(string + "\n")
-            self.log_file.flush()
 
 
     def compute_W_sparse(self, model_to_use = "best"):
