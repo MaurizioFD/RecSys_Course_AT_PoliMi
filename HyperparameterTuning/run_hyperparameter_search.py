@@ -9,7 +9,6 @@ Created on 22/11/17
 import os, multiprocessing
 from functools import partial
 
-
 ######################################################################
 ##########                                                  ##########
 ##########                  PURE COLLABORATIVE              ##########
@@ -282,7 +281,8 @@ def runHyperparameterSearch_Hybrid(recommender_class, URM_train, ICM_object, ICM
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train, ICM_object],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = {}
+                FIT_KEYWORD_ARGS = {},
+                EARLYSTOPPING_KEYWORD_ARGS = {},
             )
 
 
@@ -344,7 +344,8 @@ def runHyperparameterSearch_Hybrid(recommender_class, URM_train, ICM_object, ICM
                     CONSTRUCTOR_POSITIONAL_ARGS = [URM_train, ICM_object],
                     CONSTRUCTOR_KEYWORD_ARGS = {},
                     FIT_POSITIONAL_ARGS = [],
-                    FIT_KEYWORD_ARGS = earlystopping_keywargs
+                    FIT_KEYWORD_ARGS = {},
+                    EARLYSTOPPING_KEYWORD_ARGS = earlystopping_keywargs,
                 )
 
 
@@ -528,7 +529,8 @@ def runHyperparameterSearch_Content(recommender_class, URM_train, ICM_object, IC
         CONSTRUCTOR_POSITIONAL_ARGS = [URM_train, ICM_object],
         CONSTRUCTOR_KEYWORD_ARGS = {},
         FIT_POSITIONAL_ARGS = [],
-        FIT_KEYWORD_ARGS = {}
+        FIT_KEYWORD_ARGS = {},
+        EARLYSTOPPING_KEYWORD_ARGS = {},
     )
 
 
@@ -646,7 +648,8 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = {}
+                FIT_KEYWORD_ARGS = {},
+                EARLYSTOPPING_KEYWORD_ARGS = {},
             )
 
 
@@ -685,7 +688,8 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = {}
+                FIT_KEYWORD_ARGS = {},
+                EARLYSTOPPING_KEYWORD_ARGS = {},
             )
 
 
@@ -747,7 +751,8 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = {}
+                FIT_KEYWORD_ARGS = {},
+                EARLYSTOPPING_KEYWORD_ARGS = {},
             )
 
 
@@ -766,7 +771,8 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = {}
+                FIT_KEYWORD_ARGS = {},
+                EARLYSTOPPING_KEYWORD_ARGS = {},
             )
 
 
@@ -794,7 +800,8 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = earlystopping_keywargs
+                FIT_KEYWORD_ARGS = {},
+                EARLYSTOPPING_KEYWORD_ARGS = earlystopping_keywargs,
             )
 
         ##########################################################################################################
@@ -817,7 +824,8 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = earlystopping_keywargs
+                FIT_KEYWORD_ARGS = {},
+                EARLYSTOPPING_KEYWORD_ARGS = earlystopping_keywargs,
             )
 
         ##########################################################################################################
@@ -841,8 +849,8 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = {**earlystopping_keywargs,
-                                    "positive_threshold_BPR": None}
+                FIT_KEYWORD_ARGS = {"positive_threshold_BPR": None},
+                EARLYSTOPPING_KEYWORD_ARGS = earlystopping_keywargs,
             )
 
         ##########################################################################################################
@@ -862,7 +870,8 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = earlystopping_keywargs
+                FIT_KEYWORD_ARGS = {},
+                EARLYSTOPPING_KEYWORD_ARGS = earlystopping_keywargs,
             )
 
 
@@ -878,7 +887,8 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = {}
+                FIT_KEYWORD_ARGS = {},
+                EARLYSTOPPING_KEYWORD_ARGS = {},
             )
 
 
@@ -895,7 +905,8 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = {}
+                FIT_KEYWORD_ARGS = {},
+                EARLYSTOPPING_KEYWORD_ARGS = {},
             )
 
 
@@ -914,7 +925,8 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = {}
+                FIT_KEYWORD_ARGS = {},
+                EARLYSTOPPING_KEYWORD_ARGS = {},
             )
 
 
@@ -936,10 +948,10 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = {**earlystopping_keywargs,
-                                    "positive_threshold_BPR": None,
+                FIT_KEYWORD_ARGS = {"positive_threshold_BPR": None,
                                     'train_with_sparse_weights': None,
-                                    'allow_train_with_sparse_weights': False}
+                                    'allow_train_with_sparse_weights': False},
+                EARLYSTOPPING_KEYWORD_ARGS = earlystopping_keywargs,
             )
 
 
@@ -958,7 +970,8 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = {}
+                FIT_KEYWORD_ARGS = {},
+                EARLYSTOPPING_KEYWORD_ARGS = {},
             )
 
 
@@ -967,7 +980,7 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
         if recommender_class is EASE_R_Recommender:
 
             hyperparameters_range_dictionary = {
-                "topK": Categorical([None]),#Integer(5, 3000),
+                "topK": Categorical([None]),
                 "normalize_matrix": Categorical([False]),
                 "l2_norm": Real(low = 1e0, high = 1e7, prior = 'log-uniform'),
             }
@@ -976,7 +989,8 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = {}
+                FIT_KEYWORD_ARGS = {},
+                EARLYSTOPPING_KEYWORD_ARGS = {},
             )
 
 
@@ -999,7 +1013,8 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = earlystopping_keywargs
+                FIT_KEYWORD_ARGS = {},
+                EARLYSTOPPING_KEYWORD_ARGS = earlystopping_keywargs,
             )
 
         #########################################################################################################
@@ -1028,7 +1043,8 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_POSITIONAL_ARGS = [URM_train],
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
-                FIT_KEYWORD_ARGS = earlystopping_keywargs
+                FIT_KEYWORD_ARGS = {},
+                EARLYSTOPPING_KEYWORD_ARGS = earlystopping_keywargs,
             )
 
        #########################################################################################################

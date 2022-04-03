@@ -280,7 +280,7 @@ class Dataset(object):
               "\t\t Avg: {:.2E}\n"    
               "\t\t Max: {:.2E}\n"
               "\tGini Index: {:.2f}\n".format(
-            self.__class__,
+            self.DATASET_NAME,
             n_items,
             n_users,
             n_interactions,
@@ -320,6 +320,30 @@ class Dataset(object):
                 print(statistics_string)
 
             print("\n")
+
+
+        if self._HAS_UCM:
+
+            for UCM_name, UCM_object in self.AVAILABLE_UCM.items():
+
+                n_items, n_features = UCM_object.shape
+
+                min_value = np.min(UCM_object.data)
+                max_value = np.max(UCM_object.data)
+
+                format_string = "2E" if np.max([np.abs(min_value), np.abs(max_value)])>100 else "2f"
+
+                statistics_string = "\tUCM name: {}, Value range: {:.{format_string}} / {:.{format_string}}, Num features: {}, feature occurrences: {}, density {:.2E}".format(
+                    UCM_name,
+                    min_value, max_value,
+                    n_features,
+                    UCM_object.nnz,
+                    compute_density(UCM_object),
+                    format_string = format_string
+                )
+
+                print(statistics_string)
+
 
     #########################################################################################################
     ##########                                                                                     ##########
@@ -386,9 +410,9 @@ class Dataset(object):
         print_preamble = "{} consistency check: ".format(self.DATASET_NAME)
 
         URM_all = self.get_URM_all()
-        n_interactions = URM_all.nnz
 
-        assert n_interactions != 0, print_preamble + "Number of interactions in URM is 0"
+        for URM_name, URM_object in self.AVAILABLE_URM.items():
+                assert URM_object.nnz != 0, print_preamble + "Number of interactions in {} is 0".format(URM_name)
 
         if self.is_implicit():
             assert np.all(URM_all.data == 1.0), print_preamble + "The DataReader is stated to be implicit but the main URM is not"

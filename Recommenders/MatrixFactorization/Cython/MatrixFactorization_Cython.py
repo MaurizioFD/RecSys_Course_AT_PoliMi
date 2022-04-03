@@ -11,7 +11,6 @@ from Recommenders.BaseMatrixFactorizationRecommender import BaseMatrixFactorizat
 from Recommenders.Incremental_Training_Early_Stopping import Incremental_Training_Early_Stopping
 from Recommenders.Recommender_utils import check_matrix
 
-from CythonCompiler.run_compile_subprocess import run_compile_subprocess
 import sys
 import numpy as np
 

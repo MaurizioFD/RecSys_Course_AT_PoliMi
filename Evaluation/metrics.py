@@ -162,12 +162,12 @@ def rr(is_relevant):
 class HIT_RATE(_Metrics_Object):
     """
     Hit Rate, defined as the quota of users that received at least a correct recommendation.
-    It is bounded at 1 and is strictly increases as the recommendation list length increases.
+    It has values between 0 and 1. It strictly increases as the recommendation list length increases.
 
-    Note that this is different w.r.t. COVERAGE_USER_CORRECT, COVERAGE_USER_CORRECT uses as denominator
+    Note that this is different w.r.t. COVERAGE_USER_HIT, COVERAGE_USER_HIT uses as denominator
     all the users in the dataset, HR only those for which a recommendation was computed.
     In this framework if a user has no possible correct recommendations then it is skipped.
-    Therefore HR = COVERAGE_USER_CORRECT / COVERAGE_USER
+    Therefore HR = COVERAGE_USER_HIT / COVERAGE_USER
 
     """
 
@@ -192,50 +192,6 @@ class HIT_RATE(_Metrics_Object):
         self.cumulative_HR += other_metric_object.cumulative_HR
         self.n_users += other_metric_object.n_users
 
-
-#
-#
-# class AverageHitsPerUser(_Metrics_Object):
-#     """
-#     The average number of correct recommendations per user
-#
-#     """
-#
-#     def __init__(self):
-#         super(AverageHitsPerUser, self).__init__()
-#         self.cumulative_hits = 0.0
-#         self.n_users = 0
-#
-#     def add_recommendations(self, is_relevant):
-#         self.cumulative_hits += np.sum(is_relevant)
-#         self.n_users += 1
-#
-#     def get_metric_value(self):
-#         return self.cumulative_hits/self.n_users
-#
-#     def merge_with_other(self, other_metric_object):
-#         assert other_metric_object is AverageHitsPerUser, "AverageHitsPerUser: attempting to merge with a metric object of different type"
-#
-#         self.cumulative_hits += other_metric_object.cumulative_HR
-#         self.n_users += other_metric_object.n_users
-
-# def roc_auc(is_relevant):
-#
-#     ranks = np.arange(len(is_relevant))
-#     pos_ranks = ranks[is_relevant]
-#     neg_ranks = ranks[~is_relevant]
-#     auc_score = 0.0
-#
-#     if len(neg_ranks) == 0:
-#         return 1.0
-#
-#     if len(pos_ranks) > 0:
-#         for pos_pred in pos_ranks:
-#             auc_score += np.sum(pos_pred < neg_ranks, dtype=np.float64)
-#         auc_score /= (pos_ranks.shape[0] * neg_ranks.shape[0])
-#
-#     assert 0 <= auc_score <= 1, auc_score
-#     return auc_score
 
 
 
@@ -321,61 +277,6 @@ def dcg(scores):
                   dtype=np.float64)
 
 
-
-####################################################################################################################
-###############                 ERROR METRICS
-####################################################################################################################
-#
-# class RMSE(_Metrics_Object):
-#     """
-#     Root Mean Squared Error
-#
-#     """
-#
-#     def __init__(self, URM_all):
-#         super(RMSE, self).__init__()
-#
-#         self.cumulative_squared_error = 0.0
-#
-#         self._min_rating = np.min(URM_all.data)
-#         self._max_rating = np.max(URM_all.data)
-#
-#         self._n_predictions = 0
-#
-#     def add_recommendations(self, all_items_predicted_ratings, relevant_items, relevant_items_rating):
-#
-#         assert len(relevant_items) == len(relevant_items_rating), \
-#             "RMSE: the list of relevant items and of the corresponding rating do not have the same length"
-#
-#         assert np.all(relevant_items_rating >= self._min_rating) and np.all(relevant_items_rating <= self._max_rating), \
-#             "RMSE: relevant_items_rating contains values outside the clip range inferred from URM_all"
-#
-#         # Important, some items will have -np.inf score and are treated as if they have the minimal rating possible
-#         all_items_clipped_ratings = np.clip(all_items_predicted_ratings,
-#                                             a_min = self._min_rating,
-#                                             a_max = self._max_rating)
-#
-#         relevant_items_error = (all_items_clipped_ratings[relevant_items] - relevant_items_rating)**2
-#
-#         self.cumulative_squared_error += np.sum(relevant_items_error)
-#         self._n_predictions += len(relevant_items)
-#
-#     def get_metric_value(self):
-#
-#         if self._n_predictions == 0:
-#             return np.nan
-#
-#         MSE = self.cumulative_squared_error/self._n_predictions
-#         return np.sqrt(MSE)
-#
-#     def merge_with_other(self, other_metric_object):
-#         assert other_metric_object is RMSE, "RMSE: attempting to merge with a metric object of different type"
-#
-#         self.cumulative_squared_error += other_metric_object.cumulative_squared_error
-#         self._n_predictions += other_metric_object._n_predictions
-#
-#
-
 ####################################################################################################################
 ###############                 BEYOND-ACCURACY METRICS
 ####################################################################################################################
@@ -438,17 +339,17 @@ class Coverage_Item(_Global_Item_Distribution_Counter):
 
 
 
-class Coverage_Item_Correct(_Global_Item_Distribution_Counter):
+class Coverage_Item_HIT(_Global_Item_Distribution_Counter):
     """
     Item coverage represents the percentage of the overall test items which were correctly recommended
     https://gab41.lab41.org/recommender-systems-its-not-all-about-the-accuracy-562c7dceeaff
     """
 
     def __init__(self, n_items, ignore_items):
-        super(Coverage_Item_Correct, self).__init__(n_items, ignore_items)
+        super(Coverage_Item_HIT, self).__init__(n_items, ignore_items)
 
     def add_recommendations(self, recommended_items_ids, is_relevant):
-        super(Coverage_Item_Correct, self).add_recommendations(np.array(recommended_items_ids)[is_relevant])
+        super(Coverage_Item_HIT, self).add_recommendations(np.array(recommended_items_ids)[is_relevant])
 
     def get_metric_value(self):
 
@@ -540,19 +441,19 @@ class Coverage_User(_Metrics_Object):
 
 
 
-class Coverage_User_Correct(_Metrics_Object):
+class Coverage_User_HIT(_Metrics_Object):
     """
     User coverage represents the percentage of the overall users for which we can make at least one correct recommendation.
     If there is at least one correct recommendation the user is considered as covered.
 
     Note that this is different w.r.t. HR, HR uses as denominator only the number of users for which a recommendation was computed.
-    Therefore COVERAGE_USER_CORRECT = HR * COVERAGE_USER
+    Therefore COVERAGE_USER_HIT = HR * COVERAGE_USER
 
     https://gab41.lab41.org/recommender-systems-its-not-all-about-the-accuracy-562c7dceeaff
     """
 
     def __init__(self, n_users, ignore_users):
-        super(Coverage_User_Correct, self).__init__()
+        super(Coverage_User_HIT, self).__init__()
         self.users_mask = np.zeros(n_users, dtype=np.bool)
         self.n_ignore_users = len(ignore_users)
 
@@ -563,7 +464,7 @@ class Coverage_User_Correct(_Metrics_Object):
         return self.users_mask.sum()/(len(self.users_mask)-self.n_ignore_users)
 
     def merge_with_other(self, other_metric_object):
-        assert other_metric_object is Coverage_User, "Coverage_User_Correct: attempting to merge with a metric object of different type"
+        assert other_metric_object is Coverage_User, "Coverage_User_HIT: attempting to merge with a metric object of different type"
 
         self.users_mask = np.logical_or(self.users_mask, other_metric_object.users_mask)
 
@@ -1055,19 +956,24 @@ class Diversity_MeanInterList(_Metrics_Object):
 
 
     It was demonstrated by Ferrari Dacrema that this metric does not require to compute the common items all possible
-    couples of users have in common but rather it is only sensitive to the total amount of time each item has been recommended.
+    couples of users have in common but rather it is only sensitive to the total number of times each item has been recommended.
     MeanInterList diversity is a function of the square of the probability an item has been recommended to any user, hence
     MeanInterList diversity is equivalent to the Herfindahl index as they measure the same quantity.
     See
-    @inproceedings{ferraridacrema2020equivalence,
-      author    = {Ferrari Dacrema, Maurizio},
-      title     = {Demonstrating the Equivalence of List-Wise and Distributional Metrics to Measure the Diversity of Recommendations (Student Abstract)},
-      booktitle = {The Thirty-Fifth {AAAI} Conference on Artificial Intelligence, {AAAI}
-                   2020},
+    @inproceedings{DBLP:conf/aaai/Dacrema21,
+      author    = {Maurizio {Ferrari Dacrema}},
+      title     = {Demonstrating the Equivalence of List Based and Aggregate Metrics
+                   to Measure the Diversity of Recommendations (Student Abstract)},
+      booktitle = {Thirty-Fifth {AAAI} Conference on Artificial Intelligence, {AAAI}
+                   2021, Thirty-Third Conference on Innovative Applications of Artificial
+                   Intelligence, {IAAI} 2021, The Eleventh Symposium on Educational Advances
+                   in Artificial Intelligence, {EAAI} 2021, Virtual Event, February 2-9,
+                   2021},
+      pages     = {15779--15780},
       publisher = {{AAAI} Press},
-      year      = {2020},
+      year      = {2021},
+      url       = {https://ojs.aaai.org/index.php/AAAI/article/view/17886},
     }
-
 
     A TopPopular recommender that does not remove seen items will have 0.0 MeanInterList diversity.
 

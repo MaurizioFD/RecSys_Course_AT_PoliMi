@@ -16,7 +16,7 @@ from Data_manager.Movielens._utils_movielens_parser import _loadURM, _loadICM_ge
 
 class Movielens1MReader(DataReader):
 
-    DATASET_URL = "http://files.grouplens.org/datasets/movielens/ml-1m.zip"
+    DATASET_URL = "https://files.grouplens.org/datasets/movielens/ml-1m.zip"
     DATASET_SUBFOLDER = "Movielens1M/"
     AVAILABLE_URM = ["URM_all", "URM_timestamp"]
     AVAILABLE_ICM = ["ICM_genres", "ICM_year"]

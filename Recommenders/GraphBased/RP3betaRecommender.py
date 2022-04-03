@@ -12,6 +12,7 @@ from Recommenders.Recommender_utils import check_matrix, similarityMatrixTopK
 from Utils.seconds_to_biggest_unit import seconds_to_biggest_unit
 
 from Recommenders.BaseSimilarityMatrixRecommender import BaseItemSimilarityMatrixRecommender
+from Recommenders.Similarity.Compute_Similarity_Python import Incremental_Similarity_Builder
 import time, sys
 
 class RP3betaRecommender(BaseItemSimilarityMatrixRecommender):
@@ -30,10 +31,10 @@ class RP3betaRecommender(BaseItemSimilarityMatrixRecommender):
 
     def fit(self, alpha=1., beta=0.6, min_rating=0, topK=100, implicit=False, normalize_similarity=True):
 
+        self.topK = topK
         self.alpha = alpha
         self.beta = beta
         self.min_rating = min_rating
-        self.topK = topK
         self.implicit = implicit
         self.normalize_similarity = normalize_similarity
 
@@ -78,15 +79,7 @@ class RP3betaRecommender(BaseItemSimilarityMatrixRecommender):
         block_dim = 200
         d_t = Piu
 
-
-        # Use array as it reduces memory requirements compared to lists
-        dataBlock = 10000000
-
-        rows = np.zeros(dataBlock, dtype=np.int32)
-        cols = np.zeros(dataBlock, dtype=np.int32)
-        values = np.zeros(dataBlock, dtype=np.float32)
-
-        numCells = 0
+        similarity_builder = Incremental_Similarity_Builder(Pui.shape[1], initial_data_block=Pui.shape[1]*self.topK, dtype = np.float32)
 
 
         start_time = time.time()
@@ -111,19 +104,9 @@ class RP3betaRecommender(BaseItemSimilarityMatrixRecommender):
                 values_to_add = row_data[best][notZerosMask]
                 cols_to_add = best[notZerosMask]
 
-                for index in range(len(values_to_add)):
-
-                    if numCells == len(rows):
-                        rows = np.concatenate((rows, np.zeros(dataBlock, dtype=np.int32)))
-                        cols = np.concatenate((cols, np.zeros(dataBlock, dtype=np.int32)))
-                        values = np.concatenate((values, np.zeros(dataBlock, dtype=np.float32)))
-
-
-                    rows[numCells] = current_block_start_row + row_in_block
-                    cols[numCells] = cols_to_add[index]
-                    values[numCells] = values_to_add[index]
-
-                    numCells += 1
+                similarity_builder.add_data_lists(row_list_to_add=np.ones(len(values_to_add)) * (current_block_start_row + row_in_block),
+                                                  col_list_to_add=cols_to_add,
+                                                  data_list_to_add=values_to_add)
 
 
             if time.time() - start_time_printBatch > 300:
@@ -135,14 +118,13 @@ class RP3betaRecommender(BaseItemSimilarityMatrixRecommender):
                     float( current_block_start_row + block_dim) / (time.time() - start_time),
                     new_time_value, new_time_unit))
 
-
                 sys.stdout.flush()
                 sys.stderr.flush()
 
                 start_time_printBatch = time.time()
 
+        self.W_sparse = similarity_builder.get_SparseMatrix()
 
-        self.W_sparse = sps.csr_matrix((values[:numCells], (rows[:numCells], cols[:numCells])), shape=(Pui.shape[1], Pui.shape[1]))
 
         if self.normalize_similarity:
             self.W_sparse = normalize(self.W_sparse, norm='l1', axis=1)
@@ -150,6 +132,5 @@ class RP3betaRecommender(BaseItemSimilarityMatrixRecommender):
 
         if self.topK != False:
             self.W_sparse = similarityMatrixTopK(self.W_sparse, k=self.topK)
-
 
         self.W_sparse = check_matrix(self.W_sparse, format='csr')

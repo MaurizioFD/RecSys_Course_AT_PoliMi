@@ -8,21 +8,25 @@ Created on 22/11/2018
 
 import traceback, os, shutil
 
+from Recommenders.BaseCBFRecommender import BaseItemCBFRecommender, BaseUserCBFRecommender
 
-from Base.Evaluation.Evaluator import EvaluatorHoldout, EvaluatorNegativeItemSample
+from Evaluation.Evaluator import EvaluatorHoldout, EvaluatorNegativeItemSample
 from Data_manager.Movielens.Movielens1MReader import Movielens1MReader
 from Data_manager.DataSplitter_leave_k_out import DataSplitter_leave_k_out
-from Base.Incremental_Training_Early_Stopping import Incremental_Training_Early_Stopping
+from Recommenders.Incremental_Training_Early_Stopping import Incremental_Training_Early_Stopping
 
 
 def write_log_string(log_file, string):
     log_file.write(string)
     log_file.flush()
 
-def _get_recommender_instance(recommender_class, URM_train, ICM_train):
-    
-    if recommender_class is ItemKNNCBFRecommender:
-        recommender_object = recommender_class(URM_train, ICM_train)
+
+def _get_instance(recommender_class, URM_train, ICM_all, UCM_all):
+
+    if issubclass(recommender_class, BaseItemCBFRecommender):
+        recommender_object = recommender_class(URM_train, ICM_all)
+    elif issubclass(recommender_class, BaseUserCBFRecommender):
+        recommender_object = recommender_class(URM_train, UCM_all)
     else:
         recommender_object = recommender_class(URM_train)
 
@@ -30,9 +34,6 @@ def _get_recommender_instance(recommender_class, URM_train, ICM_train):
 
 
 def run_recommender(recommender_class):
-
-
-
     temp_save_file_folder = "./result_experiments/__temp_model/"
 
     if not os.path.isdir(temp_save_file_folder):
@@ -42,17 +43,15 @@ def run_recommender(recommender_class):
         dataset_object = Movielens1MReader()
 
         dataSplitter = DataSplitter_leave_k_out(dataset_object, k_out_value=2)
-        dataSplitter.load_data(save_folder_path= output_folder_path + dataset_object._get_dataset_name() + "_data/")
 
+        dataSplitter.load_data()
         URM_train, URM_validation, URM_test = dataSplitter.get_holdout_split()
-        ICM_name = dataSplitter.get_all_available_ICM_names()[0]
-        ICM_train = dataSplitter.get_ICM_from_name(ICM_name)
-        
+        ICM_all = dataSplitter.get_loaded_ICM_dict()["ICM_genres"]
+        UCM_all = dataSplitter.get_loaded_UCM_dict()["UCM_all"]
+
         write_log_string(log_file, "On Recommender {}\n".format(recommender_class))
 
-
-        recommender_object = _get_recommender_instance(recommender_class, URM_train, ICM_train)
-
+        recommender_object = _get_instance(recommender_class, URM_train, ICM_all, UCM_all)
 
         if isinstance(recommender_object, Incremental_Training_Early_Stopping):
             fit_params = {"epochs": 15}
@@ -65,14 +64,14 @@ def run_recommender(recommender_class):
 
 
 
-        evaluator = EvaluatorHoldout(URM_test, [5], exclude_seen=True)
-        _, results_run_string = evaluator.evaluateRecommender(recommender_object)
+        evaluator = EvaluatorHoldout(URM_test, [5], exclude_seen = True)
+        results_df, results_run_string = evaluator.evaluateRecommender(recommender_object)
 
         write_log_string(log_file, "EvaluatorHoldout OK, ")
 
 
 
-        evaluator = EvaluatorNegativeItemSample(URM_test, URM_train, [5], exclude_seen=True)
+        evaluator = EvaluatorNegativeItemSample(URM_test, URM_train, [5], exclude_seen = True)
         _, _ = evaluator.evaluateRecommender(recommender_object)
 
         write_log_string(log_file, "EvaluatorNegativeItemSample OK, ")
@@ -84,18 +83,20 @@ def run_recommender(recommender_class):
         write_log_string(log_file, "save_model OK, ")
 
 
-        recommender_object = _get_recommender_instance(recommender_class, URM_train, ICM_train)
 
-        recommender_object.load_model(temp_save_file_folder, file_name= "temp_model")
+        recommender_object = _get_instance(recommender_class, URM_train, ICM_all, UCM_all)
+        recommender_object.load_model(temp_save_file_folder, file_name="temp_model")
 
-        evaluator = EvaluatorHoldout(URM_test, [5], exclude_seen=True)
-        _, results_run_string_2 = evaluator.evaluateRecommender(recommender_object)
+        evaluator = EvaluatorHoldout(URM_test, [5], exclude_seen = True)
+        result_df_load, results_run_string_2 = evaluator.evaluateRecommender(recommender_object)
+
+        assert results_df.equals(result_df_load), "The results of the original model should be equal to that of the loaded one"
 
         write_log_string(log_file, "load_model OK, ")
 
 
 
-        shutil.rmtree(temp_save_file_folder, ignore_errors=True)
+        shutil.rmtree(temp_save_file_folder, ignore_errors = True)
 
         write_log_string(log_file, " PASS\n")
         write_log_string(log_file, results_run_string + "\n\n")
@@ -111,30 +112,13 @@ def run_recommender(recommender_class):
         traceback.print_exc()
 
 
-
-import multiprocessing
-from Base.NonPersonalizedRecommender import Random, TopPop, GlobalEffects
-from GraphBased.P3alphaRecommender import P3alphaRecommender
-from GraphBased.RP3betaRecommender import RP3betaRecommender
-
-from KNN.ItemKNNCFRecommender import ItemKNNCFRecommender
-from KNN.UserKNNCFRecommender import UserKNNCFRecommender
-
-from MatrixFactorization.PureSVDRecommender import PureSVDRecommender
-from MatrixFactorization.IALSRecommender import IALSRecommender
-from MatrixFactorization.Cython.MatrixFactorization_Cython import MatrixFactorization_BPR_Cython, MatrixFactorization_FunkSVD_Cython, MatrixFactorization_AsySVD_Cython
-
-from SLIM_BPR.Cython.SLIM_BPR_Cython import SLIM_BPR_Cython
-from SLIM_ElasticNet.SLIMElasticNetRecommender import SLIMElasticNetRecommender
-from EASE_R.EASE_R_Recommender import EASE_R_Recommender
-
-from KNN.ItemKNNCBFRecommender import ItemKNNCBFRecommender
+from Recommenders.Recommender_import_list import *
 
 
 if __name__ == '__main__':
 
-    output_folder_path = "./result_experiments/rec_test/"
-    log_file_name = "run_test_recommender.txt"
+
+    log_file_name = "./result_experiments/run_test_recommender.txt"
 
 
     recommender_list = [
@@ -156,11 +140,7 @@ if __name__ == '__main__':
         EASE_R_Recommender,
     ]
 
-    # If directory does not exist, create
-    if not os.path.exists(output_folder_path):
-        os.makedirs(output_folder_path)
-
-    log_file = open(output_folder_path + log_file_name, "w")
+    log_file = open(log_file_name, "w")
 
 
 

@@ -10,6 +10,7 @@ import numpy as np
 import time, sys
 import scipy.sparse as sps
 from Utils.seconds_to_biggest_unit import seconds_to_biggest_unit
+from Recommenders.Similarity.Compute_Similarity_Python import Incremental_Similarity_Builder
 
 class Compute_Similarity_Euclidean:
 
@@ -37,7 +38,7 @@ class Compute_Similarity_Euclidean:
         self.normalize_avg_row = normalize_avg_row
 
         self.n_rows, self.n_columns = dataMatrix.shape
-        self.TopK = min(topK, self.n_columns)
+        self.topK = min(topK, self.n_columns)
 
         self.dataMatrix = dataMatrix.copy()
 
@@ -88,9 +89,8 @@ class Compute_Similarity_Euclidean:
         :return:
         """
 
-        values = []
-        rows = []
-        cols = []
+
+        similarity_builder = Incremental_Similarity_Builder(self.n_columns, initial_data_block=self.n_columns*self.topK, dtype = np.float32)
 
         start_time = time.time()
         start_time_print_batch = start_time
@@ -180,12 +180,12 @@ class Compute_Similarity_Euclidean:
                 this_column_weights = item_similarity
 
 
-                # Sort indices and select TopK
+                # Sort indices and select topK
                 # Sorting is done in three steps. Faster then plain np.argsort for higher number of items
                 # - Partition the data to extract the set of relevant items
                 # - Sort only the relevant items
                 # - Get the original item index
-                relevant_items_partition = (-this_column_weights).argpartition(self.TopK-1)[0:self.TopK]
+                relevant_items_partition = (-this_column_weights).argpartition(self.topK - 1)[0:self.topK]
                 relevant_items_partition_sorting = np.argsort(-this_column_weights[relevant_items_partition])
                 top_k_idx = relevant_items_partition[relevant_items_partition_sorting]
 
@@ -193,9 +193,10 @@ class Compute_Similarity_Euclidean:
                 notZerosMask = this_column_weights[top_k_idx] != 0.0
                 numNotZeros = np.sum(notZerosMask)
 
-                values.extend(this_column_weights[top_k_idx][notZerosMask])
-                rows.extend(top_k_idx[notZerosMask])
-                cols.extend(np.ones(numNotZeros) * columnIndex)
+                similarity_builder.add_data_lists(row_list_to_add=top_k_idx[notZerosMask],
+                                                  col_list_to_add=np.ones(numNotZeros) * columnIndex,
+                                                  data_list_to_add=this_column_weights[top_k_idx][notZerosMask])
+
 
             # Add previous block size
             start_col_block += this_block_size
@@ -215,9 +216,6 @@ class Compute_Similarity_Euclidean:
 
 
         # End while on columns
-
-        W_sparse = sps.csr_matrix((values, (rows, cols)),
-                                  shape=(self.n_columns, self.n_columns),
-                                  dtype=np.float32)
+        W_sparse = similarity_builder.get_SparseMatrix()
 
         return W_sparse

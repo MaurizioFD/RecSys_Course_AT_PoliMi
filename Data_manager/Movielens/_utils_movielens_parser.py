@@ -15,7 +15,7 @@ def _loadICM_genres_years(genres_path, header=True, separator=',', genresSeparat
     ICM_genres_dataframe.columns = ["ItemID", "Title", "GenreList"]
 
     ICM_years_dataframe = ICM_genres_dataframe.copy()
-    ICM_years_dataframe["Year"] = ICM_years_dataframe["Title"].str.extract(pat='\(([0-9]+)\)')
+    ICM_years_dataframe["Year"] = ICM_years_dataframe["Title"].str.extract(pat='\(([0-9]{4})\)$')
     ICM_years_dataframe = ICM_years_dataframe[ICM_years_dataframe["Year"].notnull()]
     ICM_years_dataframe["Year"] = ICM_years_dataframe["Year"].astype(int)
     ICM_years_dataframe = ICM_years_dataframe[['ItemID', 'Year']]

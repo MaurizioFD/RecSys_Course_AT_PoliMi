@@ -256,7 +256,8 @@ class SearchBayesianSkopt(SearchAbstractClass):
                resume_from_saved = False,
                recommender_input_args_last_test = None,
                evaluate_on_test = "best",
-               max_total_time = None
+               max_total_time = None,
+               terminate_on_memory_error = True,
                ):
         """
 
@@ -291,7 +292,8 @@ class SearchBayesianSkopt(SearchAbstractClass):
                                     save_metadata,
                                     save_model,
                                     evaluate_on_test,
-                                    n_cases)
+                                    n_cases,
+                                    terminate_on_memory_error)
 
 
         self.n_random_starts = n_random_starts

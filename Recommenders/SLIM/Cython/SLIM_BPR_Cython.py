@@ -10,9 +10,6 @@ from Recommenders.Recommender_utils import check_matrix
 from Recommenders.BaseSimilarityMatrixRecommender import BaseItemSimilarityMatrixRecommender
 from Recommenders.Recommender_utils import similarityMatrixTopK
 from Recommenders.Incremental_Training_Early_Stopping import Incremental_Training_Early_Stopping
-
-
-from CythonCompiler.run_compile_subprocess import run_compile_subprocess
 import os, sys
 
 
@@ -142,8 +139,6 @@ class SLIM_BPR_Cython(BaseItemSimilarityMatrixRecommender, Incremental_Training_
             raise ValueError("TopK not valid. Acceptable values are either False or a positive integer value. Provided value was '{}'".format(topK))
         self.topK = topK
 
-
-        # self.batch_size = batch_size
         self.lambda_i = lambda_i
         self.lambda_j = lambda_j
         self.learning_rate = learning_rate

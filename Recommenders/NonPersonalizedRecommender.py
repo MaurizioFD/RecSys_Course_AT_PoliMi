@@ -60,7 +60,7 @@ class TopPop(BaseRecommender):
 
 
 class GlobalEffects(BaseRecommender):
-    """docstring for GlobalEffects"""
+    """GlobalEffects"""
 
     RECOMMENDER_NAME = "GlobalEffectsRecommender"
 
@@ -74,26 +74,25 @@ class GlobalEffects(BaseRecommender):
         self.lambda_item = lambda_item
         self.n_items = self.URM_train.shape[1]
 
-
         # convert to csc matrix for faster column-wise sum
         self.URM_train = check_matrix(self.URM_train, 'csc', dtype=np.float32)
 
         # 1) global average
-        self.mu = self.URM_train.data.sum(dtype=np.float32) / self.URM_train.data.shape[0]
+        self.mu = self.URM_train.data.sum(dtype=np.float32) / self.URM_train.nnz
 
         # 2) item average bias
         # compute the number of non-zero elements for each column
-        col_nnz = np.diff(self.URM_train.indptr)
-
         # it is equivalent to:
         # col_nnz = X.indptr[1:] - X.indptr[:-1]
         # and it is **much faster** than
         # col_nnz = (X != 0).sum(axis=0)
+        col_nnz = np.ediff1d(self.URM_train.indptr)
 
         URM_train_unbiased = self.URM_train.copy()
         URM_train_unbiased.data -= self.mu
         self.item_bias = URM_train_unbiased.sum(axis=0) / (col_nnz + self.lambda_item)
         self.item_bias = np.asarray(self.item_bias).ravel()  # converts 2-d matrix to 1-d array without anycopy
+        self.item_bias[col_nnz==0] = -np.inf
 
         # 3) user average bias
         # NOTE: the user bias is *useless* for the sake of ranking items. We just show it here for educational purposes.
@@ -105,20 +104,22 @@ class GlobalEffects(BaseRecommender):
 
         # now convert the csc matrix to csr for efficient row-wise computation
         URM_train_unbiased_csr = URM_train_unbiased.tocsr()
-        row_nnz = np.diff(URM_train_unbiased_csr.indptr)
+        row_nnz = np.ediff1d(URM_train_unbiased_csr.indptr)
         # finally, let's compute the bias
         self.user_bias = URM_train_unbiased_csr.sum(axis=1).ravel() / (row_nnz + self.lambda_user)
-
-        # 4) precompute the item ranking by using the item bias only
-        # the global average and user bias won't change the ranking, so there is no need to use them
-        #self.item_ranking = np.argsort(self.bi)[::-1]
+        self.user_bias = np.asarray(self.user_bias).ravel()
+        self.user_bias[row_nnz==0] = -np.inf
 
         self.URM_train = check_matrix(self.URM_train, 'csr', dtype=np.float32)
+
+
 
 
     def _compute_item_score(self, user_id_array, items_to_compute=None):
 
         # Create a single (n_items, ) array with the item score, then copy it for every user
+        # 4) Compute the item ranking by using the item bias only
+        # the global average and user bias won't change the ranking, so there is no need to use them
 
         if items_to_compute is not None:
             item_bias_to_copy = - np.ones(self.n_items, dtype=np.float32)*np.inf

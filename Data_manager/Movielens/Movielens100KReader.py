@@ -16,7 +16,7 @@ from Data_manager.Movielens._utils_movielens_parser import _loadURM
 
 class Movielens100KReader(DataReader):
 
-    DATASET_URL = "http://files.grouplens.org/datasets/movielens/ml-100k.zip"
+    DATASET_URL = "https://files.grouplens.org/datasets/movielens/ml-100k.zip"
     DATASET_SUBFOLDER = "Movielens100K/"
     AVAILABLE_ICM = []
 

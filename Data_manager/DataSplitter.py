@@ -189,11 +189,11 @@ class DataSplitter(object):
             self._print("Reading from original files...Done")
 
 
-
-
         self.get_statistics_URM()
         self.get_statistics_ICM()
+        self.get_statistics_UCM()
 
+        print("\n")
         self._print("Done.")
 
 
@@ -235,14 +235,13 @@ class DataSplitter(object):
 
 
     def get_statistics_URM(self):
-
         raise NotImplementedError("{}: get_statistics_URM was not implemented for the required dataset. Impossible to load the data".format(self.DATA_SPLITTER_NAME))
 
-
-
     def get_statistics_ICM(self):
-
         raise NotImplementedError("{}: get_statistics_ICM was not implemented for the required dataset. Impossible to load the data".format(self.DATA_SPLITTER_NAME))
+
+    def get_statistics_UCM(self):
+        raise NotImplementedError("{}: get_statistics_UCM was not implemented for the required dataset. Impossible to load the data".format(self.DATA_SPLITTER_NAME))
 
 
     #########################################################################################################

@@ -15,7 +15,7 @@ from enum import Enum
 from Utils.seconds_to_biggest_unit import seconds_to_biggest_unit
 
 from Evaluation.metrics import precision, precision_recall_min_denominator, recall, MAP, MAP_MIN_DEN, MRR, HIT_RATE, ndcg, arhr_all_hits, \
-    Novelty, Coverage_Item, Coverage_Item_Correct, _Metrics_Object, Coverage_User, Coverage_User_Correct, Gini_Diversity, Shannon_Entropy, Diversity_MeanInterList,\
+    Novelty, Coverage_Item, Coverage_Item_HIT, Items_In_GT, _Metrics_Object, Coverage_User, Coverage_User_HIT, Users_In_GT, Gini_Diversity, Shannon_Entropy, Diversity_MeanInterList,\
     Diversity_Herfindahl, AveragePopularity, Ratio_Diversity_Gini, Ratio_Diversity_Herfindahl, Ratio_Shannon_Entropy, Ratio_AveragePopularity, Ratio_Novelty
 
 
@@ -31,16 +31,17 @@ class EvaluatorMetrics(Enum):
     F1 = "F1"
     HIT_RATE = "HIT_RATE"
     ARHR = "ARHR_ALL_HITS"
-    # RMSE = "RMSE"
     NOVELTY = "NOVELTY"
     AVERAGE_POPULARITY = "AVERAGE_POPULARITY"
     DIVERSITY_SIMILARITY = "DIVERSITY_SIMILARITY"
     DIVERSITY_MEAN_INTER_LIST = "DIVERSITY_MEAN_INTER_LIST"
     DIVERSITY_HERFINDAHL = "DIVERSITY_HERFINDAHL"
     COVERAGE_ITEM = "COVERAGE_ITEM"
-    COVERAGE_ITEM_CORRECT = "COVERAGE_ITEM_CORRECT"
+    COVERAGE_ITEM_HIT = "COVERAGE_ITEM_HIT"
+    ITEMS_IN_GT = "ITEMS_IN_GT"
     COVERAGE_USER = "COVERAGE_USER"
-    COVERAGE_USER_CORRECT = "COVERAGE_USER_CORRECT"
+    COVERAGE_USER_HIT = "COVERAGE_USER_HIT"
+    USERS_IN_GT = "USERS_IN_GT"
     DIVERSITY_GINI = "DIVERSITY_GINI"
     SHANNON_ENTROPY = "SHANNON_ENTROPY"
 
@@ -55,9 +56,6 @@ def _create_empty_metrics_dict(cutoff_list, n_items, n_users, URM_train, URM_tes
 
     empty_dict = {}
 
-    # global_RMSE_object = RMSE(URM_train + URM_test)
-
-
     for cutoff in cutoff_list:
 
         cutoff_dict = {}
@@ -66,8 +64,11 @@ def _create_empty_metrics_dict(cutoff_list, n_items, n_users, URM_train, URM_tes
             if metric == EvaluatorMetrics.COVERAGE_ITEM:
                 cutoff_dict[metric.value] = Coverage_Item(n_items, ignore_items)
 
-            elif metric == EvaluatorMetrics.COVERAGE_ITEM_CORRECT:
-                cutoff_dict[metric.value] = Coverage_Item_Correct(n_items, ignore_items)
+            elif metric == EvaluatorMetrics.COVERAGE_ITEM_HIT:
+                cutoff_dict[metric.value] = Coverage_Item_HIT(n_items, ignore_items)
+
+            elif metric == EvaluatorMetrics.ITEMS_IN_GT:
+                cutoff_dict[metric.value] = Items_In_GT(URM_test, ignore_items)
 
             elif metric == EvaluatorMetrics.DIVERSITY_GINI:
                 cutoff_dict[metric.value] = Gini_Diversity(n_items, ignore_items)
@@ -78,8 +79,11 @@ def _create_empty_metrics_dict(cutoff_list, n_items, n_users, URM_train, URM_tes
             elif metric == EvaluatorMetrics.COVERAGE_USER:
                 cutoff_dict[metric.value] = Coverage_User(n_users, ignore_users)
 
-            elif metric == EvaluatorMetrics.COVERAGE_USER_CORRECT:
-                cutoff_dict[metric.value] = Coverage_User_Correct(n_users, ignore_users)
+            elif metric == EvaluatorMetrics.COVERAGE_USER_HIT:
+                cutoff_dict[metric.value] = Coverage_User_HIT(n_users, ignore_users)
+
+            elif metric == EvaluatorMetrics.USERS_IN_GT:
+                cutoff_dict[metric.value] = Users_In_GT(URM_test, ignore_users)
 
             elif metric == EvaluatorMetrics.DIVERSITY_MEAN_INTER_LIST:
                 cutoff_dict[metric.value] = Diversity_MeanInterList(n_items, cutoff)
@@ -168,12 +172,36 @@ def _remove_item_interactions(URM, item_list):
     return URM
 
 
+
+def _prune_users(URM_test, ignore_items_ID, min_ratings_per_user):
+    """
+    Remove users with a number of ratings lower than min_ratings_per_user, excluding the items to be ignored in the evaluation
+    :param URM_test:
+    :param ignore_items_ID:
+    :param min_ratings_per_user:
+    :return:
+    """
+
+    users_to_evaluate_mask = np.zeros(URM_test.shape[0], dtype=np.bool)
+
+    URM_test = _remove_item_interactions(URM_test, ignore_items_ID)
+    URM_test = sps.csr_matrix(URM_test)
+
+    rows = URM_test.indptr
+    n_user_ratings = np.ediff1d(rows)
+    new_mask = n_user_ratings >= min_ratings_per_user
+
+    users_to_evaluate_mask = np.logical_or(users_to_evaluate_mask, new_mask)
+
+    return URM_test, users_to_evaluate_mask
+
+
 class Evaluator(object):
     """Abstract Evaluator"""
 
     EVALUATOR_NAME = "Evaluator_Base_Class"
 
-    def __init__(self, URM_test_list, cutoff_list, min_ratings_per_user=1, exclude_seen=True,
+    def __init__(self, URM_test, cutoff_list, min_ratings_per_user=1, exclude_seen=True,
                  diversity_object = None,
                  ignore_items = None,
                  ignore_users = None,
@@ -196,37 +224,14 @@ class Evaluator(object):
 
         self.min_ratings_per_user = min_ratings_per_user
         self.exclude_seen = exclude_seen
-
-        if not isinstance(URM_test_list, list):
-            self.URM_test = URM_test_list.copy()
-            URM_test_list = [URM_test_list]
-        else:
-            raise ValueError("List of URM_test not supported")
-
         self.diversity_object = diversity_object
-
-        self.n_users, self.n_items = URM_test_list[0].shape
+        self.n_users, self.n_items = URM_test.shape
 
         # Prune users with an insufficient number of ratings
-        # During testing CSR is faster
-        self.URM_test_list = []
-        users_to_evaluate_mask = np.zeros(self.n_users, dtype=np.bool)
-
-        for URM_test in URM_test_list:
-
-            URM_test = _remove_item_interactions(URM_test, self.ignore_items_ID)
-
-            URM_test = sps.csr_matrix(URM_test)
-            self.URM_test_list.append(URM_test)
-
-            rows = URM_test.indptr
-            numRatings = np.ediff1d(rows)
-            new_mask = numRatings >= min_ratings_per_user
-
-            users_to_evaluate_mask = np.logical_or(users_to_evaluate_mask, new_mask)
+        self.URM_test, users_to_evaluate_mask = _prune_users(URM_test, self.ignore_items_ID, min_ratings_per_user)
 
         if not np.all(users_to_evaluate_mask):
-            self._print("Ignoring {} ({:4.1f}%) Users that have less than {} test interactions".format(np.sum(users_to_evaluate_mask),
+            self._print("Ignoring {} ({:4.1f}%) Users that have less than {} test interactions".format(len(users_to_evaluate_mask) - np.sum(users_to_evaluate_mask),
                                                                                                      100*np.sum(np.logical_not(users_to_evaluate_mask))/len(users_to_evaluate_mask), min_ratings_per_user))
 
         self.users_to_evaluate = np.arange(self.n_users)[users_to_evaluate_mask]
@@ -315,14 +320,12 @@ class Evaluator(object):
     def get_user_relevant_items(self, user_id):
 
         assert self.URM_test.getformat() == "csr", "Evaluator_Base_Class: URM_test is not CSR, this will cause errors in getting relevant items"
-
         return self.URM_test.indices[self.URM_test.indptr[user_id]:self.URM_test.indptr[user_id+1]]
 
 
     def get_user_test_ratings(self, user_id):
 
         assert self.URM_test.getformat() == "csr", "Evaluator_Base_Class: URM_test is not CSR, this will cause errors in relevant items ratings"
-
         return self.URM_test.data[self.URM_test.indptr[user_id]:self.URM_test.indptr[user_id+1]]
 
 
@@ -345,14 +348,6 @@ class Evaluator(object):
             test_user = test_user_batch_array[batch_user_index]
 
             relevant_items = self.get_user_relevant_items(test_user)
-
-            # Add the RMSE to the global object, no need to loop through the various cutoffs
-            # This repository is not designed to ensure proper RMSE optimization
-            # relevant_items_rating = self.get_user_test_ratings(test_user)
-            #
-            # all_items_predicted_ratings = scores_batch[batch_user_index]
-            # global_RMSE_object = results_dict[self.cutoff_list[0]][EvaluatorMetrics.RMSE.value]
-            # global_RMSE_object.add_recommendations(all_items_predicted_ratings, relevant_items, relevant_items_rating)
 
             # Being the URM CSR, the indices are the non-zero column indexes
             recommended_items = recommended_items_batch_list[batch_user_index]
@@ -383,9 +378,9 @@ class Evaluator(object):
                 results_current_cutoff[EvaluatorMetrics.DIVERSITY_GINI.value].add_recommendations(recommended_items_current_cutoff)
                 results_current_cutoff[EvaluatorMetrics.SHANNON_ENTROPY.value].add_recommendations(recommended_items_current_cutoff)
                 results_current_cutoff[EvaluatorMetrics.COVERAGE_ITEM.value].add_recommendations(recommended_items_current_cutoff)
-                results_current_cutoff[EvaluatorMetrics.COVERAGE_ITEM_CORRECT.value].add_recommendations(recommended_items_current_cutoff, is_relevant_current_cutoff)
+                results_current_cutoff[EvaluatorMetrics.COVERAGE_ITEM_HIT.value].add_recommendations(recommended_items_current_cutoff, is_relevant_current_cutoff)
                 results_current_cutoff[EvaluatorMetrics.COVERAGE_USER.value].add_recommendations(recommended_items_current_cutoff, test_user)
-                results_current_cutoff[EvaluatorMetrics.COVERAGE_USER_CORRECT.value].add_recommendations(is_relevant_current_cutoff, test_user)
+                results_current_cutoff[EvaluatorMetrics.COVERAGE_USER_HIT.value].add_recommendations(is_relevant_current_cutoff, test_user)
                 results_current_cutoff[EvaluatorMetrics.DIVERSITY_MEAN_INTER_LIST.value].add_recommendations(recommended_items_current_cutoff)
                 results_current_cutoff[EvaluatorMetrics.DIVERSITY_HERFINDAHL.value].add_recommendations(recommended_items_current_cutoff)
 
@@ -408,7 +403,7 @@ class Evaluator(object):
                           self._n_users_evaluated,
                           100.0* float(self._n_users_evaluated)/len(self.users_to_evaluate),
                           new_time_value, new_time_unit,
-                          float(self._n_users_evaluated)/elapsed_time))
+                          float(self._n_users_evaluated)/elapsed_time if elapsed_time>0.0 else np.nan))
 
             sys.stdout.flush()
             sys.stderr.flush()

@@ -12,6 +12,68 @@ import scipy.sparse as sps
 from Recommenders.Recommender_utils import check_matrix
 from Utils.seconds_to_biggest_unit import seconds_to_biggest_unit
 
+
+
+class Incremental_Similarity_Builder:
+    """
+    This class can be used to create a square "matrix_size x matrix_size" matrix iteratively.
+    It is developed for all recommenders that need to build, for example, an item-item or user-user similarity one
+    column at a time.
+    This class uses arrays to store the partial data and only when requested creates the sparse matrix. The arrays are
+    pre-initialized with a size equal to the attribute initial_data_block. If the data points exceed the data_block size then a new
+    array of length additional_data_block is created and concatenated to the previous one. This may cause memory spikes.
+    """
+
+    def __init__(self, matrix_size, initial_data_block = 10000000, additional_data_block = 10000000, dtype = np.float32):
+
+        self._matrix_size = matrix_size
+        self._initial_data_block = initial_data_block
+        self._additional_data_block = additional_data_block
+        self._next_cell_pointer = 0
+
+        self._dtype_data = dtype
+        self._dtype_coordinates = np.uint32
+        self._max_value_of_coordinate_dtype = np.iinfo(self._dtype_coordinates).max
+
+        self._row_array = np.zeros(self._initial_data_block, dtype=self._dtype_coordinates)
+        self._col_array = np.zeros(self._initial_data_block, dtype=self._dtype_coordinates)
+        self._data_array = np.zeros(self._initial_data_block, dtype=self._dtype_data)
+
+
+    def add_data_lists(self, row_list_to_add, col_list_to_add, data_list_to_add):
+
+        for data_point_index in range(len(row_list_to_add)):
+
+            if self._next_cell_pointer == len(self._row_array):
+                self._row_array = np.concatenate((self._row_array, np.zeros(self._additional_data_block, dtype=self._dtype_coordinates)))
+                self._col_array = np.concatenate((self._col_array, np.zeros(self._additional_data_block, dtype=self._dtype_coordinates)))
+                self._data_array = np.concatenate((self._data_array, np.zeros(self._additional_data_block, dtype=self._dtype_data)))
+
+            self._row_array[self._next_cell_pointer] = row_list_to_add[data_point_index]
+            self._col_array[self._next_cell_pointer] = col_list_to_add[data_point_index]
+            self._data_array[self._next_cell_pointer] = data_list_to_add[data_point_index]
+
+            self._next_cell_pointer += 1
+
+
+
+    def get_SparseMatrix(self):
+
+        shape = (self._matrix_size, self._matrix_size)
+
+        sparseMatrix = sps.csr_matrix((self._data_array[:self._next_cell_pointer],
+                                       (self._row_array[:self._next_cell_pointer], self._col_array[:self._next_cell_pointer])),
+                                      shape=shape,
+                                      dtype=self._dtype_data)
+
+        sparseMatrix.eliminate_zeros()
+
+
+        return sparseMatrix
+
+
+
+
 class Compute_Similarity_Python:
 
     def __init__(self, dataMatrix, topK=100, shrink = 0, normalize = True,
@@ -49,7 +111,7 @@ class Compute_Similarity_Python:
         self.normalize = normalize
 
         self.n_rows, self.n_columns = dataMatrix.shape
-        self.TopK = min(topK, self.n_columns)
+        self.topK = min(topK, self.n_columns)
 
         self.asymmetric_alpha = asymmetric_alpha
         self.tversky_alpha = tversky_alpha
@@ -212,9 +274,7 @@ class Compute_Similarity_Python:
         :return:
         """
 
-        values = []
-        rows = []
-        cols = []
+        similarity_builder = Incremental_Similarity_Builder(self.n_columns, initial_data_block=self.n_columns*self.topK, dtype = np.float32)
 
         start_time = time.time()
         start_time_print_batch = start_time
@@ -327,12 +387,12 @@ class Compute_Similarity_Python:
 
 
 
-                # Sort indices and select TopK
+                # Sort indices and select topK
                 # Sorting is done in three steps. Faster then plain np.argsort for higher number of items
                 # - Partition the data to extract the set of relevant items
                 # - Sort only the relevant items
                 # - Get the original item index
-                relevant_items_partition = (-this_column_weights).argpartition(self.TopK-1)[0:self.TopK]
+                relevant_items_partition = (-this_column_weights).argpartition(self.topK - 1)[0:self.topK]
                 relevant_items_partition_sorting = np.argsort(-this_column_weights[relevant_items_partition])
                 top_k_idx = relevant_items_partition[relevant_items_partition_sorting]
 
@@ -340,9 +400,9 @@ class Compute_Similarity_Python:
                 notZerosMask = this_column_weights[top_k_idx] != 0.0
                 numNotZeros = np.sum(notZerosMask)
 
-                values.extend(this_column_weights[top_k_idx][notZerosMask])
-                rows.extend(top_k_idx[notZerosMask])
-                cols.extend(np.ones(numNotZeros) * columnIndex)
+                similarity_builder.add_data_lists(row_list_to_add=top_k_idx[notZerosMask],
+                                                  col_list_to_add=np.ones(numNotZeros) * columnIndex,
+                                                  data_list_to_add=this_column_weights[top_k_idx][notZerosMask])
 
             # Add previous block size
             start_col_block += this_block_size
@@ -362,9 +422,6 @@ class Compute_Similarity_Python:
 
 
         # End while on columns
-
-        W_sparse = sps.csr_matrix((values, (rows, cols)),
-                                  shape=(self.n_columns, self.n_columns),
-                                  dtype=np.float32)
+        W_sparse = similarity_builder.get_SparseMatrix()
 
         return W_sparse

@@ -18,7 +18,7 @@ from Data_manager.DataReader_utils import download_from_URL, load_CSV_into_Spars
 
 class MovielensHetrec2011Reader(DataReader):
 
-    DATASET_URL = "http://files.grouplens.org/datasets/hetrec2011/hetrec2011-movielens-2k-v2.zip"
+    DATASET_URL = "https://files.grouplens.org/datasets/hetrec2011/hetrec2011-movielens-2k-v2.zip"
     DATASET_SUBFOLDER = "MovielensHetrec2011/"
     AVAILABLE_ICM = []
 

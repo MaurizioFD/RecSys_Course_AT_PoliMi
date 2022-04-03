@@ -12,7 +12,7 @@ from Recommenders.Incremental_Training_Early_Stopping import Incremental_Trainin
 import numpy as np
 from Recommenders.DataIO import DataIO
 from Evaluation.Evaluator import get_result_string_df
-
+from numpy.core._exceptions import _ArrayMemoryError
 
 
 
@@ -43,7 +43,10 @@ class SearchInputRecommenderArgs(object):
 
                    # List containing all positional arguments needed by the fit function
                    FIT_POSITIONAL_ARGS = None,
-                   FIT_KEYWORD_ARGS = None
+                   FIT_KEYWORD_ARGS = None,
+
+                   # Dictionary containing the earlystopping keyword arguments
+                   EARLYSTOPPING_KEYWORD_ARGS = None
                    ):
 
 
@@ -61,6 +64,8 @@ class SearchInputRecommenderArgs(object):
           if FIT_KEYWORD_ARGS is None:
               FIT_KEYWORD_ARGS = {}
 
+          if EARLYSTOPPING_KEYWORD_ARGS is None:
+              EARLYSTOPPING_KEYWORD_ARGS = {}
 
           assert isinstance(CONSTRUCTOR_POSITIONAL_ARGS, list), "CONSTRUCTOR_POSITIONAL_ARGS must be a list"
           assert isinstance(CONSTRUCTOR_KEYWORD_ARGS, dict), "CONSTRUCTOR_KEYWORD_ARGS must be a dict"
@@ -68,12 +73,16 @@ class SearchInputRecommenderArgs(object):
           assert isinstance(FIT_POSITIONAL_ARGS, list), "FIT_POSITIONAL_ARGS must be a list"
           assert isinstance(FIT_KEYWORD_ARGS, dict), "FIT_KEYWORD_ARGS must be a dict"
 
+          assert isinstance(EARLYSTOPPING_KEYWORD_ARGS, dict), "EARLYSTOPPING_KEYWORD_ARGS must be a dict"
+
 
           self.CONSTRUCTOR_POSITIONAL_ARGS = CONSTRUCTOR_POSITIONAL_ARGS
           self.CONSTRUCTOR_KEYWORD_ARGS = CONSTRUCTOR_KEYWORD_ARGS
 
           self.FIT_POSITIONAL_ARGS = FIT_POSITIONAL_ARGS
           self.FIT_KEYWORD_ARGS = FIT_KEYWORD_ARGS
+
+          self.EARLYSTOPPING_KEYWORD_ARGS = EARLYSTOPPING_KEYWORD_ARGS
 
 
 
@@ -86,7 +95,8 @@ class SearchInputRecommenderArgs(object):
                             CONSTRUCTOR_POSITIONAL_ARGS = self.CONSTRUCTOR_POSITIONAL_ARGS.copy(),
                             CONSTRUCTOR_KEYWORD_ARGS = self.CONSTRUCTOR_KEYWORD_ARGS.copy(),
                             FIT_POSITIONAL_ARGS = self.FIT_POSITIONAL_ARGS.copy(),
-                            FIT_KEYWORD_ARGS = self.FIT_KEYWORD_ARGS.copy()
+                            FIT_KEYWORD_ARGS = self.FIT_KEYWORD_ARGS.copy(),
+                            EARLYSTOPPING_KEYWORD_ARGS = self.EARLYSTOPPING_KEYWORD_ARGS.copy(),
                             )
 
 
@@ -105,7 +115,8 @@ def get_result_string_prettyprint(result_series_single_cutoff, n_decimals=7):
     return output_str
 
 
-
+class NeverMatch(Exception):
+    'An exception class that is never raised by any code anywhere'
 
 class SearchAbstractClass(object):
 
@@ -149,6 +160,7 @@ class SearchAbstractClass(object):
                save_model = "best",
                evaluate_on_test = "best",
                save_metadata = True,
+               terminate_on_memory_error = True,
                ):
 
         raise NotImplementedError("Function search not implemented for this class")
@@ -174,7 +186,8 @@ class SearchAbstractClass(object):
                                save_metadata,
                                save_model,
                                evaluate_on_test,
-                               n_cases):
+                               n_cases,
+                               terminate_on_memory_error):
 
 
         if save_model not in self._SAVE_MODEL_VALUES:
@@ -204,6 +217,7 @@ class SearchAbstractClass(object):
         self.metric_to_optimize = metric_to_optimize
         self.cutoff_to_optimize = cutoff_to_optimize
         self.resume_from_saved = resume_from_saved
+        self.terminate_on_memory_error = terminate_on_memory_error
         self.save_metadata = save_metadata
         self.save_model = save_model
         self.evaluate_on_test = "no" if self.evaluator_test is None else evaluate_on_test
@@ -249,36 +263,6 @@ class SearchAbstractClass(object):
                               "time_on_last_df": pd.DataFrame(columns = ["train", "test"], index = [0]),
                               }
 
-    def _remove_intermediate_cases(self, cases_to_remove_list):
-
-        assert 0 not in cases_to_remove_list
-        self.metadata_dict['result_on_last'] = None
-        self.metadata_dict['time_on_last_df'] = pd.DataFrame(columns = ["train", "test"], index = [0])
-
-        for index in cases_to_remove_list:
-            self.metadata_dict['exception_list'][index] = None
-            self.metadata_dict['hyperparameters_df'].loc[index] = np.nan
-            self.metadata_dict['result_on_test_df'].loc[index] = np.nan
-            self.metadata_dict['result_on_validation_df'].loc[index] = np.nan
-            self.metadata_dict['time_df'].loc[index] = np.nan
-
-            if self.metadata_dict['hyperparameters_best_index'] == index:
-                self.metadata_dict['hyperparameters_best_index'] = None
-                self.metadata_dict['hyperparameters_best'] = None
-                self.metadata_dict['result_on_test_best'] = None
-                self.metadata_dict['result_on_validation_best'] = None
-
-        self.metadata_dict["time_on_test_avg"] = self.metadata_dict["time_df"]["test"].mean(axis=0, skipna=True)
-        self.metadata_dict["time_on_test_total"] = self.metadata_dict["time_df"]["test"].sum(axis=0, skipna=True)
-        self.metadata_dict["time_on_train_avg"] = self.metadata_dict["time_df"]["train"].mean(axis=0, skipna=True)
-        self.metadata_dict["time_on_train_total"] = self.metadata_dict["time_df"]["train"].sum(axis=0, skipna=True)
-        self.metadata_dict["time_on_validation_avg"] = self.metadata_dict["time_df"]["validation"].mean(axis=0, skipna=True)
-        self.metadata_dict["time_on_validation_total"] = self.metadata_dict["time_df"]["validation"].sum(axis=0, skipna=True)
-
-        self.dataIO.save_data(data_dict_to_save = self.metadata_dict.copy(),
-                              file_name = self.output_file_name_root + "_metadata")
-
-
     def _print(self, string):
         if self.verbose:
             print(string)
@@ -303,6 +287,7 @@ class SearchAbstractClass(object):
 
         recommender_instance.fit(*self.recommender_input_args.FIT_POSITIONAL_ARGS,
                                  **self.recommender_input_args.FIT_KEYWORD_ARGS,
+                                 **self.recommender_input_args.EARLYSTOPPING_KEYWORD_ARGS,
                                  **current_fit_hyperparameters)
 
         train_time = time.time() - start_time
@@ -423,16 +408,16 @@ class SearchAbstractClass(object):
 
         # Use the hyperparameters that have been saved
         assert self.metadata_dict["hyperparameters_best"] is not None, "{}: Best hyperparameters not available, the search might have failed.".format(self.ALGORITHM_NAME)
-        fit_keyword_args = self.metadata_dict["hyperparameters_best"].copy()
+        hyperparameters_best_args = self.metadata_dict["hyperparameters_best"].copy()
 
         recommender_instance.fit(*self.recommender_input_args_last_test.FIT_POSITIONAL_ARGS,
-                                 **fit_keyword_args)
+                                 **self.recommender_input_args.FIT_KEYWORD_ARGS,
+                                 **hyperparameters_best_args)
 
         train_time = time.time() - start_time
         self.metadata_dict["time_on_last_df"].loc[0, "train"] = train_time
 
         if self.evaluate_on_test in ["all", "best", "last"]:
-            # result_df_test, evaluation_test_time = self._evaluate_on_test(recommender_instance, fit_keyword_args, False, None, print_log = False)
             start_time = time.time()
             result_df_test, _ = self.evaluator_test.evaluateRecommender(recommender_instance)
             evaluation_test_time = time.time() - start_time
@@ -533,6 +518,11 @@ class SearchAbstractClass(object):
         except (KeyboardInterrupt, SystemExit) as e:
             # If getting a interrupt, terminate without saving the exception
             raise e
+
+        # Catch exception only if terminate_on_memory_error is True
+        except (_ArrayMemoryError, MemoryError) if self.terminate_on_memory_error else (NeverMatch) as e:
+            self._print("{}: Search for '{}' interrupted due to MemoryError.".format(self.ALGORITHM_NAME, self.metadata_dict["algorithm_name_recommender"]))
+            return
 
         except:
             # Catch any error: Exception, Tensorflow errors etc...

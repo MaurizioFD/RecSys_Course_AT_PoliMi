@@ -150,8 +150,24 @@ class DataSplitter_leave_k_out(_DataSplitter):
 
                 print(statistics_string)
 
-            print("\n")
+    def get_statistics_UCM(self):
 
+        self._assert_is_initialized()
+
+        if len(self.dataReader_object.get_loaded_UCM_names())>0:
+
+            for UCM_name, UCM_object in self.SPLIT_UCM_DICT.items():
+
+                n_items, n_features = UCM_object.shape
+
+                statistics_string = "\tUCM name: {}, Num features: {}, feature occurrences: {}, density {:.2E}".format(
+                    UCM_name,
+                    n_features,
+                    UCM_object.nnz,
+                    compute_density(UCM_object)
+                )
+
+                print(statistics_string)
 
 
     def _assert_is_initialized(self):

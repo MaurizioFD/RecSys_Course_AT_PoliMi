@@ -50,7 +50,6 @@ class SearchSingleCase(SearchAbstractClass):
         self.n_loaded_counter = self.model_counter
 
         self._print("{}: Resuming '{}'... Loaded {} configurations.".format(self.ALGORITHM_NAME, self.output_file_name_root, self.model_counter))
-
         return True
 
 
@@ -85,6 +84,7 @@ class SearchSingleCase(SearchAbstractClass):
                resume_from_saved = False,
                save_model = "best",
                evaluate_on_test = "best",
+               terminate_on_memory_error = True,
                ):
 
 
@@ -103,7 +103,8 @@ class SearchSingleCase(SearchAbstractClass):
                                     save_metadata,
                                     save_model,
                                     evaluate_on_test,
-                                    n_cases)
+                                    n_cases,
+                                    terminate_on_memory_error)
 
 
         self.n_loaded_counter = 0

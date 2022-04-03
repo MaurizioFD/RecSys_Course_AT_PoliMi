@@ -10,6 +10,7 @@ import scipy.sparse as sps
 from Recommenders.Recommender_utils import check_matrix
 from sklearn.linear_model import ElasticNet
 from Recommenders.BaseSimilarityMatrixRecommender import BaseItemSimilarityMatrixRecommender
+from Recommenders.Similarity.Compute_Similarity_Python import Incremental_Similarity_Builder
 from Utils.seconds_to_biggest_unit import seconds_to_biggest_unit
 import time, sys
 from tqdm import tqdm
@@ -64,14 +65,7 @@ class SLIMElasticNetRecommender(BaseItemSimilarityMatrixRecommender):
 
         n_items = URM_train.shape[1]
 
-        # Use array as it reduces memory requirements compared to lists
-        dataBlock = 10000000
-
-        rows = np.zeros(dataBlock, dtype=np.int32)
-        cols = np.zeros(dataBlock, dtype=np.int32)
-        values = np.zeros(dataBlock, dtype=np.float32)
-
-        numCells = 0
+        similarity_builder = Incremental_Similarity_Builder(self.n_items, initial_data_block=self.n_items*self.topK, dtype = np.float32)
 
         start_time = time.time()
         start_time_printBatch = start_time
@@ -110,19 +104,9 @@ class SLIMElasticNetRecommender(BaseItemSimilarityMatrixRecommender):
             relevant_items_partition_sorting = np.argsort(-nonzero_model_coef_value[relevant_items_partition])
             ranking = relevant_items_partition[relevant_items_partition_sorting]
 
-            for index in range(len(ranking)):
-
-                if numCells == len(rows):
-                    rows = np.concatenate((rows, np.zeros(dataBlock, dtype=np.int32)))
-                    cols = np.concatenate((cols, np.zeros(dataBlock, dtype=np.int32)))
-                    values = np.concatenate((values, np.zeros(dataBlock, dtype=np.float32)))
-
-
-                rows[numCells] = nonzero_model_coef_index[ranking[index]]
-                cols[numCells] = currentItem
-                values[numCells] = nonzero_model_coef_value[ranking[index]]
-
-                numCells += 1
+            similarity_builder.add_data_lists(row_list_to_add=nonzero_model_coef_index[ranking],
+                                              col_list_to_add=np.ones(len(nonzero_model_coef_index)) * currentItem,
+                                              data_list_to_add=nonzero_model_coef_value[ranking])
 
             # finally, replace the original values of the j-th column
             URM_train.data[start_pos:end_pos] = current_item_data_backup
@@ -144,10 +128,7 @@ class SLIMElasticNetRecommender(BaseItemSimilarityMatrixRecommender):
 
                 start_time_printBatch = time.time()
 
-        # generate the sparse weight matrix
-        self.W_sparse = sps.csr_matrix((values[:numCells], (rows[:numCells], cols[:numCells])),
-                                       shape=(n_items, n_items), dtype=np.float32)
-
+        self.W_sparse = similarity_builder.get_SparseMatrix()
 
 
 

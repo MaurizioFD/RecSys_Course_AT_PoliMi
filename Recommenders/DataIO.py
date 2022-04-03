@@ -45,7 +45,7 @@ class DataIO(object):
 
         self._is_windows = platform.system() == "Windows"
 
-        self.folder_path = folder_path
+        self.folder_path = folder_path if folder_path[-1] == "/" else folder_path + "/"
         self._key_string_alert_done = False
 
         # if self._is_windows:
@@ -95,7 +95,7 @@ class DataIO(object):
 
         dict_to_save_key_str = {str(key):val for (key,val) in dict_to_save.items()}
 
-        assert all(dict_to_save_key_str[str(key)] == val for (key,val) in dict_to_save.items()), \
+        assert len(dict_to_save_key_str) == len(dict_to_save), \
             "DataIO: Transforming dictionary keys into strings altered its content. Duplicate keys may have been produced."
 
         return dict_to_save_key_str
@@ -117,6 +117,8 @@ class DataIO(object):
 
             data_format = {}
             attribute_to_save_as_json = {}
+
+            data_dict_to_save = self._check_dict_key_type(data_dict_to_save)
 
             for attrib_name, attrib_data in data_dict_to_save.items():
 
