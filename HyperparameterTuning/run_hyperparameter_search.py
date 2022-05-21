@@ -1024,7 +1024,7 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
             n_items = URM_train.shape[1]
 
             hyperparameters_range_dictionary = {
-                "epochs": Categorical([300]),
+                "epochs": Categorical([500]),
                 "learning_rate": Real(low=1e-6, high=1e-2, prior="log-uniform"),
                 "l2_reg": Real(low=1e-6, high=1e-2, prior="log-uniform"),
                 "dropout": Real(low=0., high=0.8, prior="uniform"),
@@ -1032,11 +1032,13 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 "anneal_cap": Real(low=0., high=0.6, prior="uniform"),
                 "batch_size": Categorical([128, 256, 512, 1024]),
 
-                "encoding_size": Integer(1, min(512, n_items)),
+                "encoding_size": Integer(1, min(512, n_items-1)),
                 "next_layer_size_multiplier": Integer(2, 10),
                 "max_n_hidden_layers": Integer(1, 4),
-                # Reduce max_layer_size if estimated last layer weights size exceeds 2 GB
-                "max_layer_size": Categorical([min(5*1e3, int(2*1e9*8/64/n_items))]),
+
+                # Constrain the decoder to a maximum number of parameters so that its size does not exceed 5 GB
+                # Estimate size by considering each parameter uses float32
+                "max_decoder_parameters": Categorical([5*1e9*8/32]),
             }
 
             recommender_input_args = SearchInputRecommenderArgs(
@@ -1105,30 +1107,22 @@ def read_data_split_and_search():
         - A _best_result_test file which contains a dictionary with the results, on the test set, of the best solution chosen using the validation set
     """
 
-    from Data_manager.Movielens1M.Movielens1MReader import Movielens1MReader
-    from Data_manager.DataSplitter_k_fold_stratified import DataSplitter_Warm_k_fold
+    from Data_manager.Movielens.Movielens1MReader import Movielens1MReader
+    from Data_manager.DataSplitter_Holdout import DataSplitter_Holdout
 
 
-    dataset_object = Movielens1MReader()
+    dataset_reader = Movielens1MReader()
+    output_folder_path = "result_experiments/SKOPT_test/"
 
-    dataSplitter = DataSplitter_Warm_k_fold(dataset_object)
-
-    dataSplitter.load_data()
+    dataSplitter = DataSplitter_Holdout(dataset_reader, user_wise = False, split_interaction_quota_list=[80, 10, 10])
+    dataSplitter.load_data(save_folder_path=output_folder_path + "data/")
 
     URM_train, URM_validation, URM_test = dataSplitter.get_holdout_split()
-
-
-    output_folder_path = "result_experiments/SKOPT_prova/"
 
 
     # If directory does not exist, create
     if not os.path.exists(output_folder_path):
         os.makedirs(output_folder_path)
-
-
-
-
-
 
 
     collaborative_algorithm_list = [

@@ -8,6 +8,8 @@ Created on 06/07/2018
 
 import time, sys
 import numpy as np
+import pandas as pd
+
 from Recommenders.BaseTempFolder import BaseTempFolder
 from Utils.seconds_to_biggest_unit import seconds_to_biggest_unit
 
@@ -37,6 +39,7 @@ class Incremental_Training_Early_Stopping(object):
     """
 
     def __init__(self):
+        self._earlystopping_validation_summary_df = None
         super(Incremental_Training_Early_Stopping, self).__init__()
 
 
@@ -86,7 +89,25 @@ class Incremental_Training_Early_Stopping(object):
         """
         raise NotImplementedError()
 
+    def _update_validation_summary_table(self, epochs_current, results_run):
+        """
+        Updates a dataframe containing the validation results at each validation step
+        :param epochs_current:
+        :param results_run:
+        :return:
+        """
 
+        results_run["epoch"] = epochs_current + 1
+        results_run.reset_index(level=0, inplace = True)
+        results_run.set_index('epoch', inplace = True)
+
+        if self._earlystopping_validation_summary_df is None:
+            self._earlystopping_validation_summary_df = results_run.copy()
+        else:
+            self._earlystopping_validation_summary_df = pd.concat([self._earlystopping_validation_summary_df, results_run], axis=0)
+
+    def get_validation_summary_table(self):
+        return self._earlystopping_validation_summary_df.copy()
 
     def _train_with_early_stopping(self, epochs_max, epochs_min = 0,
                                    validation_every_n = None, stop_on_validation = False,
@@ -169,6 +190,7 @@ class Incremental_Training_Early_Stopping(object):
         convergence = False
 
         self.epochs_best = 0
+        self._earlystopping_validation_summary_df = None
 
         epochs_current = 0
 
@@ -189,7 +211,11 @@ class Incremental_Training_Early_Stopping(object):
                 self._prepare_model_for_validation()
 
                 # If the evaluator validation has multiple cutoffs, choose the first one
+                start_time_validation = time.time()
                 results_run, results_run_string = evaluator_object.evaluateRecommender(self)
+                results_run["earlystopping_evaluation_time"] = time.time()-start_time_validation
+                self._update_validation_summary_table(epochs_current, results_run)
+
                 current_metric_value = results_run.iloc[0][validation_metric]
 
                 print("{}: {}".format(algorithm_name, results_run_string))

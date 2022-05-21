@@ -14,6 +14,14 @@ from Recommenders.DataIO import DataIO
 from Evaluation.Evaluator import get_result_string_df
 from numpy.core._exceptions import _ArrayMemoryError
 
+MEMORY_ERROR_EXCEPTION_TUPLE = (_ArrayMemoryError, MemoryError)
+
+try:
+    from tensorflow.python.framework.errors_impl import ResourceExhaustedError
+    MEMORY_ERROR_EXCEPTION_TUPLE += (ResourceExhaustedError,)
+except ImportError:
+    print("Tensorflow is not available")
+
 
 
 def create_result_multiindex_dataframe(n_cases, result_df):
@@ -247,6 +255,7 @@ class SearchAbstractClass(object):
                               "result_on_validation_best": None,
                               "result_on_test_df": None,
                               "result_on_test_best": None,
+                              "result_on_earlystopping_df": pd.DataFrame(dtype=object) if issubclass(self.recommender_class, Incremental_Training_Early_Stopping) else None,
 
                               "time_df": pd.DataFrame(columns = ["train", "validation", "test"], index = np.arange(n_cases)),
 
@@ -326,6 +335,16 @@ class SearchAbstractClass(object):
             if isinstance(recommender_instance, Incremental_Training_Early_Stopping):
                 for epoch_key, epoch_value in recommender_instance.get_early_stopping_final_epochs_dict().items():
                     self.metadata_dict["hyperparameters_df"].loc[self.model_counter, epoch_key] = int(epoch_value)
+
+                ## This is to ensure backward compatibility
+                if "result_on_earlystopping_df" not in self.metadata_dict:
+                    self.metadata_dict["result_on_earlystopping_df"] = pd.DataFrame(dtype=object) if issubclass(self.recommender_class, Incremental_Training_Early_Stopping) else None
+
+                # Add the data from all validation steps
+                if self.metadata_dict["result_on_earlystopping_df"] is not None:
+                    earlystopping_df_multiindex = pd.concat({self.model_counter: recommender_instance.get_validation_summary_table()}, names=['model_counter'])
+                    self.metadata_dict["result_on_earlystopping_df"] = pd.concat([self.metadata_dict["result_on_earlystopping_df"], earlystopping_df_multiindex])
+
 
         else:
             # If it was already evaluated load the data
@@ -520,7 +539,7 @@ class SearchAbstractClass(object):
             raise e
 
         # Catch exception only if terminate_on_memory_error is True
-        except (_ArrayMemoryError, MemoryError) if self.terminate_on_memory_error else (NeverMatch) as e:
+        except MEMORY_ERROR_EXCEPTION_TUPLE if self.terminate_on_memory_error else (NeverMatch) as e:
             self._print("{}: Search for '{}' interrupted due to MemoryError.".format(self.ALGORITHM_NAME, self.metadata_dict["algorithm_name_recommender"]))
             return
 

@@ -101,8 +101,8 @@ class _MultDAE_original(object):
                     stddev=0.001, seed=self.random_seed)))
 
             # add summary stats
-            tf.compat.v1.summary.histogram(weight_key, self.weights[-1])
-            tf.compat.v1.summary.histogram(bias_key, self.biases[-1])
+            # tf.compat.v1.summary.histogram(weight_key, self.weights[-1])
+            # tf.compat.v1.summary.histogram(bias_key, self.biases[-1])
 
 
 
@@ -204,8 +204,8 @@ class _MultVAE_original(_MultDAE_original):
                     stddev=0.001, seed=self.random_seed)))
 
             # add summary stats
-            tf.compat.v1.summary.histogram(weight_key, self.weights_q[-1])
-            tf.compat.v1.summary.histogram(bias_key, self.biases_q[-1])
+            # tf.compat.v1.summary.histogram(weight_key, self.weights_q[-1])
+            # tf.compat.v1.summary.histogram(bias_key, self.biases_q[-1])
 
         self.weights_p, self.biases_p = [], []
 
@@ -223,8 +223,8 @@ class _MultVAE_original(_MultDAE_original):
                     stddev=0.001, seed=self.random_seed)))
 
             # add summary stats
-            tf.compat.v1.summary.histogram(weight_key, self.weights_p[-1])
-            tf.compat.v1.summary.histogram(bias_key, self.biases_p[-1])
+            # tf.compat.v1.summary.histogram(weight_key, self.weights_p[-1])
+            # tf.compat.v1.summary.histogram(bias_key, self.biases_p[-1])
 
 
 
@@ -337,7 +337,7 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
 
             self.load_model(self.temp_file_folder, file_name="_best_model", is_earlystopping_format = True)
 
-        except tf.errors.InvalidArgumentError as e:
+        except (Exception, tf.errors.InvalidArgumentError) as e:
             raise e
 
         finally:
@@ -381,10 +381,10 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
                          self.vae.is_training_ph: 1}
             self.sess.run(self.train_op_var, feed_dict=feed_dict)
 
-            if bnum % 100 == 0:
-                summary_train = self.sess.run(self.merged_var, feed_dict=feed_dict)
-                # self.summary_writer.add_summary(summary_train,
-                #                            global_step=num_epoch * self.batches_per_epoch + bnum)
+            # if bnum % 100 == 0:
+            #     summary_train = self.sess.run(self.merged_var, feed_dict=feed_dict)
+            #     # self.summary_writer.add_summary(summary_train,
+            #     #                            global_step=num_epoch * self.batches_per_epoch + bnum)
 
             self.update_count += 1
 
@@ -405,8 +405,11 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
         self._print("Saving model in file '{}'".format(folder_path + file_name))
 
         # Save session within a temp folder called as the desired file_name
+        if not os.path.isdir(folder_path + file_name + "/.session"):
+            os.makedirs(folder_path + file_name + "/.session")
+
         saver = tf.compat.v1.train.Saver()
-        saver.save(self.sess, folder_path + file_name + "/session")
+        saver.save(self.sess, folder_path + file_name + "/.session/session")
 
         data_dict_to_save = {
             "batch_size": self.batch_size,
@@ -479,7 +482,7 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
         self.sess = tf.compat.v1.Session()
         self.sess.run(tf.compat.v1.global_variables_initializer())
 
-        self.saver.restore(self.sess, folder_path + file_name + "/session")
+        self.saver.restore(self.sess, folder_path + file_name + "/.session/session")
 
         # self.summary_writer = tf.compat.v1.summary.FileWriter(self.log_dir, graph=tf.compat.v1.get_default_graph())
 
@@ -491,13 +494,13 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
 class MultVAERecommender_OptimizerMask(MultVAERecommender):
 
     def fit(self, epochs=100, batch_size=500, total_anneal_steps=200000, learning_rate=1e-3, l2_reg=0.01,
-            dropout=0.5, anneal_cap=0.2, encoding_size = 50, next_layer_size_multiplier = 2, max_layer_size = 5*1e3, max_n_hidden_layers = 3,
+            dropout=0.5, anneal_cap=0.2, encoding_size = 50, next_layer_size_multiplier = 2, max_decoder_parameters = np.inf, max_n_hidden_layers = 3,
             temp_file_folder=None, **earlystopping_kwargs):
 
         assert next_layer_size_multiplier > 1.0, "next_layer_size_multiplier must be > 1.0"
         assert encoding_size <= self.n_items, "encoding_size must be <= the number of items"
 
-        p_dims = generate_autoencoder_architecture(encoding_size, self.n_items, next_layer_size_multiplier, max_layer_size, max_n_hidden_layers)
+        p_dims = generate_autoencoder_architecture(encoding_size, self.n_items, next_layer_size_multiplier, max_decoder_parameters, max_n_hidden_layers)
 
         self._print("Architecture: {}".format(p_dims))
 
