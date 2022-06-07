@@ -282,7 +282,6 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
         self.dropout = dropout
         self.l2_reg = l2_reg
         self.learning_rate = learning_rate
-
         self.update_count = 0.0
 
         if p_dims is None:
@@ -293,36 +292,13 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
         if self.p_dims[-1] != self.n_items:
             self.p_dims.append(self.n_items)
 
-        tf.compat.v1.reset_default_graph()
-        tf.compat.v1.disable_eager_execution()
+        self._get_clean_session()
 
         q_dims = self.p_dims[::-1]
 
         self.vae = _MultVAE_original(self.p_dims, q_dims=q_dims, lr=self.learning_rate, lam=self.l2_reg, random_seed=98765)
         self.saver, self.logits_var, self.loss_var, self.train_op_var, self.merged_var = self.vae.build_graph()
 
-        # arch_str = "I-%s-I" % ('-'.join([str(d) for d in self.vae.dims[1:-1]]))
-        #
-        # self.log_dir = self.temp_file_folder + 'log/VAE_anneal{}K_cap{:1.1E}/{}'.format(
-        #     total_anneal_steps/1000, anneal_cap, arch_str)
-        #
-        # if os.path.exists(self.log_dir):
-        #     shutil.rmtree(self.log_dir)
-        #
-        # print("Mult_VAE_RecommenderWrapper: log directory: %s" % self.log_dir)
-
-        # self.summary_writer = tf.compat.v1.summary.FileWriter(self.log_dir, graph=tf.compat.v1.get_default_graph())
-
-        # self.chkpt_dir = self.temp_file_folder + 'chkpt/VAE_anneal{}K_cap{:1.1E}/{}'.format(
-        #     total_anneal_steps/1000, anneal_cap, arch_str)
-        #
-        # if not os.path.isdir(self.chkpt_dir):
-        #     os.makedirs(self.chkpt_dir)
-        #
-        # print("Mult_VAE_RecommenderWrapper: checkpoint directory: %s" % self.chkpt_dir)
-
-
-        self.sess = tf.compat.v1.Session()
         self.sess.run(tf.compat.v1.global_variables_initializer())
 
         self._update_best_model()
@@ -333,9 +309,7 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
                                             algorithm_name = self.RECOMMENDER_NAME,
                                             **earlystopping_kwargs)
 
-            self.sess.close()
-
-            self.load_model(self.temp_file_folder, file_name="_best_model", is_earlystopping_format = True)
+            self.load_model(self.temp_file_folder, file_name="_best_model", create_zip = False)
 
         except (Exception, tf.errors.InvalidArgumentError) as e:
             raise e
@@ -344,6 +318,18 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
             self._clean_temp_folder(temp_file_folder=self.temp_file_folder)
 
 
+    def _get_clean_session(self):
+        tf.keras.backend.clear_session()
+        tf.compat.v1.reset_default_graph()
+        tf.compat.v1.disable_eager_execution()
+
+        try:
+            if self.sess is not None:
+                self.sess.close()
+        except AttributeError:
+            pass
+
+        self.sess = tf.compat.v1.Session()
 
 
     def _prepare_model_for_validation(self):
@@ -351,7 +337,7 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
 
 
     def _update_best_model(self):
-        self.save_model(self.temp_file_folder, file_name="_best_model", is_earlystopping_format = True)
+        self.save_model(self.temp_file_folder, file_name="_best_model", create_zip = False)
 
 
     def _run_epoch(self, num_epoch):
@@ -381,11 +367,6 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
                          self.vae.is_training_ph: 1}
             self.sess.run(self.train_op_var, feed_dict=feed_dict)
 
-            # if bnum % 100 == 0:
-            #     summary_train = self.sess.run(self.merged_var, feed_dict=feed_dict)
-            #     # self.summary_writer.add_summary(summary_train,
-            #     #                            global_step=num_epoch * self.batches_per_epoch + bnum)
-
             self.update_count += 1
 
 
@@ -395,7 +376,7 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
 
 
 
-    def save_model(self, folder_path, file_name = None, is_earlystopping_format = False):
+    def save_model(self, folder_path, file_name = None, create_zip = True):
 
         #https://cv-tricks.com/tensorflow-tutorial/save-restore-tensorflow-models-quick-complete-tutorial/
 
@@ -429,7 +410,7 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
         dataIO.save_data(file_name="fit_attributes", data_dict_to_save = data_dict_to_save)
 
         # Create a zip folder containing fit_attributes and saved session
-        if not is_earlystopping_format:
+        if create_zip:
             # Unfortunately I cannot avoid compression so it is too slow for earlystopping
             shutil.make_archive(
               folder_path + file_name,          # name of the file to create
@@ -438,15 +419,6 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
               base_dir = None)                  # start archiving from the root_dir
 
             shutil.rmtree(folder_path + file_name + "/", ignore_errors=True)
-        #
-        # else:
-        #
-        #     with zipfile.ZipFile(folder_path + file_name + ".zip", 'w', compression=zipfile.ZIP_STORED) as myzip:
-        #         for file_to_compress in os.listdir(folder_path + file_name + "/"):
-        #             myzip.write(folder_path + file_name + "/" + file_to_compress, arcname = file_to_compress)
-        #
-
-
 
         self._print("Saving complete")
 
@@ -454,14 +426,14 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
 
 
 
-    def load_model(self, folder_path, file_name = None, is_earlystopping_format = False):
+    def load_model(self, folder_path, file_name = None, create_zip = True):
 
         if file_name is None:
             file_name = self.RECOMMENDER_NAME
 
         self._print("Loading model from file '{}'".format(folder_path + file_name))
 
-        if not is_earlystopping_format:
+        if create_zip:
             shutil.unpack_archive(folder_path + file_name + ".zip",
                                   folder_path + file_name + "/",
                                   "zip")
@@ -472,19 +444,16 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
         for attrib_name in data_dict.keys():
              self.__setattr__(attrib_name, data_dict[attrib_name])
 
-        tf.compat.v1.reset_default_graph()
+        self._get_clean_session()
 
         q_dims = self.p_dims[::-1]
 
         self.vae = _MultVAE_original(self.p_dims, q_dims=q_dims, lr=self.learning_rate, lam=self.l2_reg, random_seed=98765)
         self.saver, self.logits_var, self.loss_var, self.train_op_var, self.merged_var = self.vae.build_graph()
 
-        self.sess = tf.compat.v1.Session()
         self.sess.run(tf.compat.v1.global_variables_initializer())
 
         self.saver.restore(self.sess, folder_path + file_name + "/.session/session")
-
-        # self.summary_writer = tf.compat.v1.summary.FileWriter(self.log_dir, graph=tf.compat.v1.get_default_graph())
 
         shutil.rmtree(folder_path + file_name + "/", ignore_errors=True)
 
@@ -494,13 +463,13 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
 class MultVAERecommender_OptimizerMask(MultVAERecommender):
 
     def fit(self, epochs=100, batch_size=500, total_anneal_steps=200000, learning_rate=1e-3, l2_reg=0.01,
-            dropout=0.5, anneal_cap=0.2, encoding_size = 50, next_layer_size_multiplier = 2, max_decoder_parameters = np.inf, max_n_hidden_layers = 3,
+            dropout=0.5, anneal_cap=0.2, encoding_size = 50, next_layer_size_multiplier = 2, max_parameters = np.inf, max_n_hidden_layers = 3,
             temp_file_folder=None, **earlystopping_kwargs):
 
         assert next_layer_size_multiplier > 1.0, "next_layer_size_multiplier must be > 1.0"
         assert encoding_size <= self.n_items, "encoding_size must be <= the number of items"
 
-        p_dims = generate_autoencoder_architecture(encoding_size, self.n_items, next_layer_size_multiplier, max_decoder_parameters, max_n_hidden_layers)
+        p_dims = generate_autoencoder_architecture(encoding_size, self.n_items, next_layer_size_multiplier, max_parameters, max_n_hidden_layers)
 
         self._print("Architecture: {}".format(p_dims))
 

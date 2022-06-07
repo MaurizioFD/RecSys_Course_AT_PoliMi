@@ -1036,9 +1036,9 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 "next_layer_size_multiplier": Integer(2, 10),
                 "max_n_hidden_layers": Integer(1, 4),
 
-                # Constrain the decoder to a maximum number of parameters so that its size does not exceed 5 GB
+                # Constrain the model to a maximum number of parameters so that its size does not exceed 7 GB
                 # Estimate size by considering each parameter uses float32
-                "max_decoder_parameters": Categorical([5*1e9*8/32]),
+                "max_parameters": Categorical([7*1e9*8/32]),
             }
 
             recommender_input_args = SearchInputRecommenderArgs(
