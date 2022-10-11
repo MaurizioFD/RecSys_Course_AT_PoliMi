@@ -52,7 +52,7 @@ def check_matrix(X, format='csc', dtype=np.float32):
         return X.astype(dtype)
 
 
-def similarityMatrixTopK(item_weights, k=100, verbose = False):
+def similarityMatrixTopK(item_weights, k=100, verbose = False, use_absolute_values = False):
     """
     The function selects the TopK most similar elements, column-wise
 
@@ -104,7 +104,11 @@ def similarityMatrixTopK(item_weights, k=100, verbose = False):
 
         non_zero_data = column_data!=0
 
-        idx_sorted = np.argsort(column_data[non_zero_data])  # sort by column
+        if use_absolute_values:
+            idx_sorted = np.argsort(np.abs(column_data[non_zero_data]))  # sort by column
+        else:
+            idx_sorted = np.argsort(column_data[non_zero_data])  # sort by column
+
         top_k_idx = idx_sorted[-k:]
 
         data.extend(column_data[non_zero_data][top_k_idx])

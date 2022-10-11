@@ -100,7 +100,7 @@ class P3alphaRecommender(BaseItemSimilarityMatrixRecommender):
                                                   data_list_to_add=values_to_add)
 
 
-            if time.time() - start_time_printBatch > 300:
+            if time.time() - start_time_printBatch > 300 or current_block_start_row + block_dim == Pui.shape[1]:
                 new_time_value, new_time_unit = seconds_to_biggest_unit(time.time() - start_time)
 
                 self._print("Similarity column {} ({:4.1f}%), {:.2f} column/sec. Elapsed time {:.2f} {}".format(

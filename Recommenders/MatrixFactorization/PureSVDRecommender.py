@@ -162,17 +162,15 @@ class ScaledPureSVDRecommender(PureSVDRecommender):
         super(ScaledPureSVDRecommender, self).__init__(URM_train, verbose = verbose)
 
 
-    def fit(self, num_factors=100, random_seed = None, scaling_items = 1.0, scaling_users = 1.0):
+    def fit(self, num_factors = 100, random_seed = None, scaling_items = 1.0, scaling_users = 1.0):
 
         item_pop = np.ediff1d(sps.csc_matrix(self.URM_train).indptr)
-        scaling_matrix = sps.diags(np.power(item_pop, scaling_items - 1))
-
-        self.URM_train = self.URM_train * scaling_matrix
+        item_scaling_matrix = sps.diags(np.power(item_pop + 1e-6, scaling_items))
 
         user_pop = np.ediff1d(sps.csr_matrix(self.URM_train).indptr)
-        scaling_matrix = sps.diags(np.power(user_pop, scaling_users - 1))
+        user_scaling_matrix = sps.diags(np.power(user_pop + 1e-6, scaling_users))
 
-        self.URM_train = scaling_matrix * self.URM_train
+        self.URM_train = user_scaling_matrix.dot(self.URM_train).dot(item_scaling_matrix)
 
         super(ScaledPureSVDRecommender, self).fit(num_factors = num_factors, random_seed = random_seed)
 

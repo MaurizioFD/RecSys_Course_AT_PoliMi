@@ -949,7 +949,7 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
                 CONSTRUCTOR_KEYWORD_ARGS = {},
                 FIT_POSITIONAL_ARGS = [],
                 FIT_KEYWORD_ARGS = {"positive_threshold_BPR": None,
-                                    'train_with_sparse_weights': None,
+                                    'train_with_sparse_weights': False,
                                     'allow_train_with_sparse_weights': False},
                 EARLYSTOPPING_KEYWORD_ARGS = earlystopping_keywargs,
             )

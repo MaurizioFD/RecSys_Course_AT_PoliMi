@@ -14,19 +14,31 @@ import numpy as np
 import time
 import scipy.sparse as sps
 
-from Recommenders.Similarity.Compute_Similarity import Compute_Similarity
-
-
 class EASE_R_Recommender(BaseItemSimilarityMatrixRecommender):
     """ EASE_R_Recommender
 
         https://arxiv.org/pdf/1905.03375.pdf
 
-     @article{steck2019embarrassingly,
-      title={Embarrassingly Shallow Autoencoders for Sparse Data},
-      author={Steck, Harald},
-      journal={arXiv preprint arXiv:1905.03375},
-      year={2019}
+    @inproceedings{DBLP:conf/www/Steck19,
+          author    = {Harald Steck},
+          editor    = {Ling Liu and
+                       Ryen W. White and
+                       Amin Mantrach and
+                       Fabrizio Silvestri and
+                       Julian J. McAuley and
+                       Ricardo Baeza{-}Yates and
+                       Leila Zia},
+          title     = {Embarrassingly Shallow Autoencoders for Sparse Data},
+          booktitle = {The World Wide Web Conference, {WWW} 2019, San Francisco, CA, USA,
+                       May 13-17, 2019},
+          pages     = {3251--3257},
+          publisher = {{ACM}},
+          year      = {2019},
+          url       = {https://doi.org/10.1145/3308558.3313710},
+          doi       = {10.1145/3308558.3313710},
+          timestamp = {Sun, 22 Sep 2019 18:12:47 +0200},
+          biburl    = {https://dblp.org/rec/conf/www/Steck19.bib},
+          bibsource = {dblp computer science bibliography, https://dblp.org}
     }
 
     """
@@ -34,13 +46,11 @@ class EASE_R_Recommender(BaseItemSimilarityMatrixRecommender):
     RECOMMENDER_NAME = "EASE_R_Recommender"
 
 
-    def __init__(self, URM_train, sparse_threshold_quota = None):
-        super(EASE_R_Recommender, self).__init__(URM_train)
+    def __init__(self, URM_train, sparse_threshold_quota = None, verbose = True):
+        super(EASE_R_Recommender, self).__init__(URM_train, verbose = verbose)
         self.sparse_threshold_quota = sparse_threshold_quota
 
-    def fit(self, topK=None, l2_norm = 1e3, normalize_matrix = False, verbose = True):
-
-        self.verbose = verbose
+    def fit(self, topK=None, l2_norm = 1e3, normalize_matrix = False):
 
         start_time = time.time()
         self._print("Fitting model... ")
@@ -53,15 +63,10 @@ class EASE_R_Recommender(BaseItemSimilarityMatrixRecommender):
 
 
         # Grahm matrix is X^t X, compute dot product
-        similarity = Compute_Similarity(self.URM_train, shrink=0, topK=self.URM_train.shape[1], normalize=False, similarity = "cosine")
-        grahm_matrix = similarity.compute_similarity().toarray()
+        grahm_matrix = self.URM_train.T.dot(self.URM_train).toarray()
 
         diag_indices = np.diag_indices(grahm_matrix.shape[0])
-
-        # The Compute_Similarity object ensures the diagonal of the similarity matrix is zero
-        # in this case we need the diagonal as well, which is just the item popularity
-        item_popularity = np.ediff1d(self.URM_train.tocsc().indptr)
-        grahm_matrix[diag_indices] = item_popularity + l2_norm
+        grahm_matrix[diag_indices] += l2_norm
 
         P = np.linalg.inv(grahm_matrix)
 
@@ -75,8 +80,9 @@ class EASE_R_Recommender(BaseItemSimilarityMatrixRecommender):
 
         # Check if the matrix should be saved in a sparse or dense format
         # The matrix is sparse, regardless of the presence of the topK, if nonzero cells are less than sparse_threshold_quota %
+        # B contains positive and negative values, so topK is selected based on the *absolute* value to preserve strong negatives
         if topK is not None:
-            B = similarityMatrixTopK(B, k = topK, verbose = False)
+            B = similarityMatrixTopK(B, k = topK, use_absolute_values = True, verbose = False)
 
 
         if self._is_content_sparse_check(B):
