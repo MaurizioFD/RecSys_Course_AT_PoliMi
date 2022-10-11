@@ -12,5 +12,5 @@ lightfm==1.16
 RISE==5.6.1
 torch==1.7.0
 jupyter-contrib-nbextensions==0.5.1
-tensorflow==2.8.0
+tensorflow==2.8.1
 tables==3.7.0
