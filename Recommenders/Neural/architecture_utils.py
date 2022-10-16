@@ -153,7 +153,6 @@ def get_number_autoencoder_parameters(decoder_architecture):
 
     for input_size, output_size in zip(full_architecture, full_architecture[1:]):
         n_parameters += (input_size + 1) * output_size
-        # print(input_size, output_size)
 
     return n_parameters
 

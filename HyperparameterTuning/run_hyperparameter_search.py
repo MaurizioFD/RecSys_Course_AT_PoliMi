@@ -628,6 +628,8 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
 
     URM_train = URM_train.copy()
 
+    n_users, n_items = URM_train.shape
+
     if URM_train_last_test is not None:
         URM_train_last_test = URM_train_last_test.copy()
 
@@ -1020,8 +1022,6 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
         #########################################################################################################
 
         if recommender_class is MultVAERecommender:
-
-            n_items = URM_train.shape[1]
 
             hyperparameters_range_dictionary = {
                 "epochs": Categorical([500]),

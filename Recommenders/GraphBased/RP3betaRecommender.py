@@ -97,16 +97,18 @@ class RP3betaRecommender(BaseItemSimilarityMatrixRecommender):
                 row_data = np.multiply(similarity_block[row_in_block, :], degree)
                 row_data[current_block_start_row + row_in_block] = 0
 
-                best = row_data.argsort()[::-1][:self.topK]
+                relevant_items_partition = np.argpartition(-row_data, self.topK-1, axis=0)[:self.topK]
+                row_data = row_data[relevant_items_partition]
 
-                notZerosMask = row_data[best] != 0.0
+                # Incrementally build sparse matrix, do not add zeros
+                if np.any(row_data == 0.0):
+                    non_zero_mask = row_data != 0.0
+                    relevant_items_partition = relevant_items_partition[non_zero_mask]
+                    row_data = row_data[non_zero_mask]
 
-                values_to_add = row_data[best][notZerosMask]
-                cols_to_add = best[notZerosMask]
-
-                similarity_builder.add_data_lists(row_list_to_add=np.ones(len(values_to_add)) * (current_block_start_row + row_in_block),
-                                                  col_list_to_add=cols_to_add,
-                                                  data_list_to_add=values_to_add)
+                similarity_builder.add_data_lists(row_list_to_add=np.ones(len(row_data), dtype = np.int) * (current_block_start_row + row_in_block),
+                                                  col_list_to_add=relevant_items_partition,
+                                                  data_list_to_add=row_data)
 
 
             if time.time() - start_time_printBatch > 300 or current_block_start_row + block_dim == Pui.shape[1]:

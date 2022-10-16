@@ -7,7 +7,7 @@ Created on 30/03/2019
 """
 
 
-def seconds_to_biggest_unit(time_in_seconds, data_array = None):
+def seconds_to_biggest_unit(time_in_seconds):
 
     conversion_factor_list = [
         ("sec", 1),
@@ -30,12 +30,6 @@ def seconds_to_biggest_unit(time_in_seconds, data_array = None):
             unit_index += 1
             new_time_value = temp_time_value
             new_time_unit = conversion_factor_list[unit_index][0]
-
-            if data_array is not None:
-                data_array /= conversion_factor_list[unit_index+1][1]
-
-    if data_array is not None:
-        return new_time_value, new_time_unit, data_array
 
     else:
         return new_time_value, new_time_unit

@@ -51,7 +51,7 @@ from Utils.seconds_to_biggest_unit import seconds_to_biggest_unit
 @cython.overflowcheck(False)
 cdef class Compute_Similarity_Cython:
 
-    cdef int TopK
+    cdef int topK
     cdef long n_columns, n_rows
 
     cdef double[:] this_item_weights
@@ -144,7 +144,7 @@ cdef class Compute_Similarity_Cython:
                              " Passed value was '{}'".format(similarity))
 
 
-        self.TopK = min(topK, self.n_columns)
+        self.topK = min(topK, self.n_columns)
         self.this_item_weights = np.zeros(self.n_columns, dtype=np.float64)
         self.this_item_weights_id = np.zeros(self.n_columns, dtype=np.int32)
         self.this_item_weights_mask = np.zeros(self.n_columns, dtype=np.int32)
@@ -211,7 +211,7 @@ cdef class Compute_Similarity_Cython:
 
 
 
-        if self.TopK == 0:
+        if self.topK == 0:
             self.W_dense = np.zeros((self.n_columns,self.n_columns))
 
 
@@ -427,7 +427,7 @@ cdef class Compute_Similarity_Cython:
         cdef long long[:] top_k_idx
 
         # Declare numpy data type to use vetor indexing and simplify the topK selection code
-        cdef np.ndarray[LONG_t, ndim=1] top_k_partition, top_k_partition_sorting
+        cdef np.ndarray[LONG_t, ndim=1] relevant_items_partition
         cdef np.ndarray[np.float64_t, ndim=1] this_item_weights_np = np.zeros(self.n_columns, dtype=np.float64)
         #cdef double[:] this_item_weights
 
@@ -435,7 +435,7 @@ cdef class Compute_Similarity_Cython:
 
         # Data structure to incrementally build sparse matrix
         # Preinitialize max possible length
-        cdef unsigned long long max_cells = <long long> self.n_columns*self.TopK
+        cdef unsigned long long max_cells = <long long> self.n_columns*self.topK
         cdef double[:] values = np.zeros((max_cells))
         cdef int[:] rows = np.zeros((max_cells,), dtype=np.int32)
         cdef int[:] cols = np.zeros((max_cells,), dtype=np.int32)
@@ -507,52 +507,32 @@ cdef class Compute_Similarity_Cython:
                     self.this_item_weights[inner_item_index] /= self.shrink
 
 
-            if self.TopK == 0:
+            if self.topK == 0:
 
                 for inner_item_index in range(self.n_columns):
                     self.W_dense[inner_item_index,item_index] = self.this_item_weights[inner_item_index]
 
             else:
 
-                # Sort indices and select TopK
+                # Sort indices and select topK
                 # Using numpy implies some overhead, unfortunately the plain C qsort function is even slower
-                #top_k_idx = np.argsort(this_item_weights) [-self.TopK:]
-
-                # Sorting is done in three steps. Faster then plain np.argsort for higher number of items
-                # because we avoid sorting elements we already know we don't care about
-                # - Partition the data to extract the set of TopK items, this set is unsorted
-                # - Sort only the TopK items, discarding the rest
-                # - Get the original item index
-                #
-
-
 
                 #this_item_weights_np = clone(template_zero, self.this_item_weights_counter, zero=False)
                 for inner_item_index in range(self.n_columns):
                     this_item_weights_np[inner_item_index] = 0.0
-
 
                 # Add weights in the same ordering as the self.this_item_weights_id data structure
                 for inner_item_index in range(self.this_item_weights_counter):
                     item_id = self.this_item_weights_id[inner_item_index]
                     this_item_weights_np[inner_item_index] = - self.this_item_weights[item_id]
 
-
-                local_topK = min([self.TopK, self.this_item_weights_counter])
-
-                # Get the unordered set of topK items
-                top_k_partition = np.argpartition(this_item_weights_np, local_topK-1)[0:local_topK]
-                # Sort only the elements in the partition
-                top_k_partition_sorting = np.argsort(this_item_weights_np[top_k_partition])
-                # Get original index
-                top_k_idx = top_k_partition[top_k_partition_sorting]
-
-
+                # Sort indices and select topK, partition the data to extract the set of relevant items
+                relevant_items_partition = np.argpartition(this_item_weights_np, self.topK - 1, axis=0)[0:self.topK]
 
                 # Incrementally build sparse matrix, do not add zeros
-                for inner_item_index in range(len(top_k_idx)):
+                for inner_item_index in range(len(relevant_items_partition)):
 
-                    topK_item_index = top_k_idx[inner_item_index]
+                    topK_item_index = relevant_items_partition[inner_item_index]
 
                     item_id = self.this_item_weights_id[topK_item_index]
 
@@ -594,7 +574,7 @@ cdef class Compute_Similarity_Cython:
         # End while on columns
 
 
-        if self.TopK == 0:
+        if self.topK == 0:
 
             return np.array(self.W_dense)
 

@@ -83,7 +83,7 @@ class BaseItemSimilarityMatrixRecommender(BaseSimilarityMatrixRecommender):
         user_profile_array = self.URM_train[user_id_array]
 
         if items_to_compute is not None:
-            item_scores = - np.ones((len(user_id_array), self.URM_train.shape[1]), dtype=np.float32)*np.inf
+            item_scores = - np.ones((len(user_id_array), self.n_items), dtype=np.float32)*np.inf
             item_scores_all = user_profile_array.dot(self.W_sparse).toarray()
             item_scores[:, items_to_compute] = item_scores_all[:, items_to_compute]
         else:
@@ -107,7 +107,7 @@ class BaseUserSimilarityMatrixRecommender(BaseSimilarityMatrixRecommender):
         user_weights_array = self.W_sparse[user_id_array]
 
         if items_to_compute is not None:
-            item_scores = - np.ones((len(user_id_array), self.URM_train.shape[1]), dtype=np.float32)*np.inf
+            item_scores = - np.ones((len(user_id_array), self.n_items), dtype=np.float32)*np.inf
             item_scores_all = user_weights_array.dot(self.URM_train).toarray()
             item_scores[:, items_to_compute] = item_scores_all[:, items_to_compute]
         else:

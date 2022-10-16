@@ -5,6 +5,8 @@
 @author: Maurizio Ferrari Dacrema
 """
 
+from Recommenders.Similarity.Compute_Similarity_Python import Incremental_Similarity_Builder
+
 import numpy as np
 import scipy.sparse as sps
 import time
@@ -66,30 +68,23 @@ def similarityMatrixTopK(item_weights, k=100, verbose = False, use_absolute_valu
 
     assert (item_weights.shape[0] == item_weights.shape[1]), "selectTopK: ItemWeights is not a square matrix"
 
+    n_items = item_weights.shape[0]
+    similarity_builder = Incremental_Similarity_Builder(n_items, initial_data_block=n_items*k, dtype = np.float32)
+
     start_time = time.time()
 
     if verbose:
         print("Generating topK matrix")
 
-    nitems = item_weights.shape[1]
-    k = min(k, nitems)
-
     # for each column, keep only the top-k scored items
     sparse_weights = not isinstance(item_weights, np.ndarray)
 
     # iterate over each column and keep only the top-k similar items
-    data, rows_indices, cols_indptr = [], [], []
-
     if sparse_weights:
         item_weights = check_matrix(item_weights, format='csc', dtype=np.float32)
-    else:
-        column_row_index = np.arange(nitems, dtype=np.int32)
 
 
-
-    for item_idx in range(nitems):
-
-        cols_indptr.append(len(data))
+    for item_idx in range(n_items):
 
         if sparse_weights:
             start_position = item_weights.indptr[item_idx]
@@ -100,30 +95,39 @@ def similarityMatrixTopK(item_weights, k=100, verbose = False, use_absolute_valu
 
         else:
             column_data = item_weights[:,item_idx]
+            column_row_index = np.arange(n_items, dtype=np.int32)
+
+        if np.any(column_data==0):
+            non_zero_data = column_data!=0
+            column_data = column_data[non_zero_data]
+            column_row_index = column_row_index[non_zero_data]
 
 
-        non_zero_data = column_data!=0
+        # If there is less data than k, there is no need to sort
+        if k < len(column_data):
+            # Use argpartition because I only need to select "which" are the topK elements, I do not need their exact order
+            if use_absolute_values:
+                top_k_idx = np.argpartition(-np.abs(column_data), k-1, axis=0)[:k]
+            else:
+                top_k_idx = np.argpartition(-column_data, k-1, axis=0)[:k]
 
-        if use_absolute_values:
-            idx_sorted = np.argsort(np.abs(column_data[non_zero_data]))  # sort by column
-        else:
-            idx_sorted = np.argsort(column_data[non_zero_data])  # sort by column
-
-        top_k_idx = idx_sorted[-k:]
-
-        data.extend(column_data[non_zero_data][top_k_idx])
-        rows_indices.extend(column_row_index[non_zero_data][top_k_idx])
+            try:
+                column_row_index = column_row_index[top_k_idx]
+                column_data = column_data[top_k_idx]
+            except:
+                pass
 
 
-    cols_indptr.append(len(data))
+        similarity_builder.add_data_lists(row_list_to_add = column_row_index,
+                                          col_list_to_add = np.ones(len(column_row_index), dtype = np.int) * item_idx,
+                                          data_list_to_add = column_data)
 
-    # During testing CSR is faster
-    W_sparse = sps.csc_matrix((data, rows_indices, cols_indptr), shape=(nitems, nitems), dtype=np.float32)
+
 
     if verbose:
         print("Sparse TopK matrix generated in {:.2f} seconds".format(time.time() - start_time))
 
-    return W_sparse
+    return similarity_builder.get_SparseMatrix()
 
 
 

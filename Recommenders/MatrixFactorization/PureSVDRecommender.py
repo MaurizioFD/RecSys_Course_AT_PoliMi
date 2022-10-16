@@ -6,7 +6,8 @@ Created on 14/06/18
 @author: Maurizio Ferrari Dacrema
 """
 
-from Recommenders.BaseMatrixFactorizationRecommender import BaseMatrixFactorizationRecommender
+from Recommenders.Similarity.Compute_Similarity_Python import Incremental_Similarity_Builder
+from Recommenders.BaseMatrixFactorizationRecommender import BaseSVDRecommender
 from Utils.seconds_to_biggest_unit import seconds_to_biggest_unit
 from sklearn.utils.extmath import randomized_svd
 import scipy.sparse as sps
@@ -15,7 +16,7 @@ import time
 
 
 
-class PureSVDRecommender(BaseMatrixFactorizationRecommender):
+class PureSVDRecommender(BaseSVDRecommender):
     """ PureSVDRecommender
     Formulation with user latent factors and item latent factors
 
@@ -38,15 +39,14 @@ class PureSVDRecommender(BaseMatrixFactorizationRecommender):
         start_time = time.time()
         self._print("Computing SVD decomposition...")
 
-        U, Sigma, QT = randomized_svd(self.URM_train,
+        U, Sigma, VT = randomized_svd(self.URM_train,
                                       n_components=num_factors,
                                       #n_iter=5,
                                       random_state = random_seed)
 
-        U_s = U * sps.diags(Sigma)
-
-        self.USER_factors = U_s
-        self.ITEM_factors = QT.T
+        self.USER_factors = U
+        self.ITEM_factors = VT.T
+        self.Sigma = Sigma
 
         new_time_value, new_time_unit = seconds_to_biggest_unit(time.time()-start_time)
         self._print("Computing SVD decomposition... done in {:.2f} {}".format( new_time_value, new_time_unit))
@@ -59,18 +59,13 @@ class PureSVDRecommender(BaseMatrixFactorizationRecommender):
 
 def compute_W_sparse_from_item_latent_factors(ITEM_factors, topK = 100):
 
-
     n_items, n_factors = ITEM_factors.shape
 
     block_size = 100
-
     start_item = 0
     end_item = 0
 
-    values = []
-    rows = []
-    cols = []
-
+    similarity_builder = Incremental_Similarity_Builder(n_items, initial_data_block=n_items*topK, dtype = np.float32)
 
     # Compute all similarities for each item using vectorization
     while start_item < n_items:
@@ -85,32 +80,24 @@ def compute_W_sparse_from_item_latent_factors(ITEM_factors, topK = 100):
             this_column_weights = this_block_weight[col_index_in_block, :]
             item_original_index = start_item + col_index_in_block
 
-            # Sort indices and select TopK
-            # Sorting is done in three steps. Faster then plain np.argsort for higher number of items
-            # - Partition the data to extract the set of relevant items
-            # - Sort only the relevant items
-            # - Get the original item index
-            relevant_items_partition = (-this_column_weights).argpartition(topK-1)[0:topK]
-            relevant_items_partition_sorting = np.argsort(-this_column_weights[relevant_items_partition])
-            top_k_idx = relevant_items_partition[relevant_items_partition_sorting]
+            # Select TopK
+            relevant_items_partition = np.argpartition(-this_column_weights, topK-1, axis=0)[0:topK]
+            this_column_weights = this_column_weights[relevant_items_partition]
 
             # Incrementally build sparse matrix, do not add zeros
-            notZerosMask = this_column_weights[top_k_idx] != 0.0
-            numNotZeros = np.sum(notZerosMask)
+            if np.any(this_column_weights == 0.0):
+                non_zero_mask = this_column_weights != 0.0
+                relevant_items_partition = relevant_items_partition[non_zero_mask]
+                this_column_weights = this_column_weights[non_zero_mask]
 
-            values.extend(this_column_weights[top_k_idx][notZerosMask])
-            rows.extend(top_k_idx[notZerosMask])
-            cols.extend(np.ones(numNotZeros) * item_original_index)
-
+            similarity_builder.add_data_lists(row_list_to_add=relevant_items_partition,
+                                              col_list_to_add=np.ones(len(relevant_items_partition), dtype = np.int) * item_original_index,
+                                              data_list_to_add=this_column_weights)
 
 
         start_item += block_size
 
-    W_sparse = sps.csr_matrix((values, (rows, cols)),
-                              shape=(n_items, n_items),
-                              dtype=np.float32)
-
-    return W_sparse
+    return similarity_builder.get_SparseMatrix()
 
 
 from Recommenders.BaseSimilarityMatrixRecommender import BaseItemSimilarityMatrixRecommender
@@ -137,7 +124,7 @@ class PureSVDItemRecommender(BaseItemSimilarityMatrixRecommender):
 
         self._print("Computing SVD decomposition...")
 
-        U, Sigma, QT = randomized_svd(self.URM_train,
+        U, Sigma, VT = randomized_svd(self.URM_train,
                                       n_components=num_factors,
                                       #n_iter=5,
                                       random_state = random_seed)
@@ -145,7 +132,7 @@ class PureSVDItemRecommender(BaseItemSimilarityMatrixRecommender):
         if topK is None:
             topK = self.n_items
 
-        W_sparse = compute_W_sparse_from_item_latent_factors(QT.T, topK=topK)
+        W_sparse = compute_W_sparse_from_item_latent_factors(VT.T, topK=topK)
 
         self.W_sparse = sps.csr_matrix(W_sparse)
 

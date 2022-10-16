@@ -77,6 +77,26 @@ def run_recommender(recommender_class):
         write_log_string(log_file, "EvaluatorNegativeItemSample OK, ")
 
 
+        items_to_compute_not_sorted = np.random.randint(0,URM_train.shape[1], size = 300)
+        items_to_compute_sorted = np.sort(items_to_compute_not_sorted)
+        for user_id in range(URM_train.shape[0]):
+            recommendations_sorted, scores_sorted = recommender_object.recommend(user_id, cutoff = 50, items_to_compute = items_to_compute_sorted, return_scores = True)
+            recommendations_not_sorted, scores_not_sorted = recommender_object.recommend(user_id, cutoff = 50, items_to_compute = items_to_compute_not_sorted, return_scores = True)
+
+            # try:
+            assert np.equal(recommendations_sorted, recommendations_not_sorted).all()
+            assert np.allclose(scores_sorted, scores_not_sorted, atol=1e-5)
+
+            scores_sorted[0,items_to_compute_sorted] = -np.inf
+            assert np.isinf(scores_sorted).all()
+            # except:
+            #     # np.where(np.logical_not(scores_sorted == scores_not_sorted))[1]
+            #     pass
+
+        write_log_string(log_file, "items_to_compute in the right order OK, ")
+
+
+
 
         recommender_object.save_model(temp_save_file_folder, file_name="temp_model")
 
@@ -90,11 +110,18 @@ def run_recommender(recommender_class):
         evaluator = EvaluatorHoldout(URM_test, [5], exclude_seen = True)
         result_df_load, results_run_string_2 = evaluator.evaluateRecommender(recommender_object)
 
+        print(results_run_string)
+        print(results_run_string_2)
         assert results_df.equals(result_df_load), "The results of the original model should be equal to that of the loaded one"
 
         write_log_string(log_file, "load_model OK, ")
 
 
+
+
+        from Recommenders.DataIO import DataIO
+        dataIO = DataIO(temp_save_file_folder)
+        data = dataIO.load_data("temp_model.zip")
 
         shutil.rmtree(temp_save_file_folder, ignore_errors = True)
 
