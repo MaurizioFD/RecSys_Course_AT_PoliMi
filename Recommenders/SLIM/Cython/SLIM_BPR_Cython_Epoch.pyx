@@ -1240,12 +1240,19 @@ cdef class Triangular_Matrix:
         self.isSymmetric = isSymmetric
 
         self.row_pointer = <double **> PyMem_Malloc(self.num_rows * sizeof(double*))
-
-
+        if self.row_pointer == NULL:
+            raise MemoryError
 
         # Initialize all rows to empty
         for numRow in range(self.num_rows):
+            self.row_pointer[numRow] = NULL
+
+        for numRow in range(self.num_rows):
             self.row_pointer[numRow] = < double *> PyMem_Malloc((numRow+1) * sizeof(double))
+
+            if self.row_pointer[numRow] == NULL:
+                self.dealloc()
+                raise MemoryError
 
             for numCol in range(numRow+1):
                 self.row_pointer[numRow][numCol] = 0.0
@@ -1262,7 +1269,8 @@ cdef class Triangular_Matrix:
 
         # Free all rows memory
         for numRow in range(self.num_rows):
-            PyMem_Free(self.row_pointer[numRow])
+            if self.row_pointer[numRow] != NULL:
+                PyMem_Free(self.row_pointer[numRow])
 
         PyMem_Free(self.row_pointer)
 
@@ -1345,7 +1353,7 @@ cdef class Triangular_Matrix:
         cdef array[double] currentRowArray = clone(template_zero, self.num_cols, zero=True)
 
         # Declare numpy data type to use vetor indexing and simplify the topK selection code
-        cdef np.ndarray[LONG_t, ndim=1] top_k_partition, top_k_partition_sorting
+        cdef np.ndarray[LONG_t, ndim=1] relevant_items_partition
         cdef np.ndarray[np.float64_t, ndim=1] currentRowArray_np
 
 
@@ -1374,27 +1382,14 @@ cdef class Triangular_Matrix:
             if TopK:
 
                 # Sort indices and select TopK
-                # Using numpy implies some overhead, unfortunately the plain C qsort function is even slower
-                #top_k_idx = np.argsort(this_item_weights) [-self.TopK:]
-
-                # Sorting is done in three steps. Faster then plain np.argsort for higher number of items
-                # because we avoid sorting elements we already know we don't care about
-                # - Partition the data to extract the set of TopK items, this set is unsorted
-                # - Sort only the TopK items, discarding the rest
-                # - Get the original item index
-
                 currentRowArray_np = - np.array(currentRowArray)
-                #
-                # Get the unordered set of topK items
-                top_k_partition = np.argpartition(currentRowArray_np, TopK-1)[0:TopK]
-                # Sort only the elements in the partition
-                top_k_partition_sorting = np.argsort(currentRowArray_np[top_k_partition])
-                # Get original index
-                top_k_idx = top_k_partition[top_k_partition_sorting]
 
-                for index in range(len(top_k_idx)):
+                # Sort indices and select topK, partition the data to extract the set of relevant items
+                relevant_items_partition = np.argpartition(currentRowArray_np, TopK - 1, axis=0)[0:TopK]
 
-                    col = top_k_idx[index]
+                for index in range(len(relevant_items_partition)):
+
+                    col = relevant_items_partition[index]
 
                     if currentRowArray[col] != 0.0:
                         indices.append(col)

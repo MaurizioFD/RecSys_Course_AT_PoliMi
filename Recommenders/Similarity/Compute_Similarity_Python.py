@@ -9,7 +9,7 @@ Created on 23/10/17
 import numpy as np
 import time, sys
 import scipy.sparse as sps
-from Recommenders.Recommender_utils import check_matrix
+import Recommenders.Recommender_utils as recommender_utils
 from Utils.seconds_to_biggest_unit import seconds_to_biggest_unit
 
 
@@ -179,7 +179,7 @@ class Compute_Similarity_Python:
         :return:
         """
 
-        self.dataMatrix = check_matrix(self.dataMatrix, 'csr')
+        self.dataMatrix = recommender_utils.check_matrix(self.dataMatrix, 'csr')
 
 
         interactionsPerRow = np.diff(self.dataMatrix.indptr)
@@ -216,7 +216,7 @@ class Compute_Similarity_Python:
         :return:
         """
 
-        self.dataMatrix = check_matrix(self.dataMatrix, 'csc')
+        self.dataMatrix = recommender_utils.check_matrix(self.dataMatrix, 'csc')
 
 
         interactionsPerCol = np.diff(self.dataMatrix.indptr)
@@ -292,7 +292,7 @@ class Compute_Similarity_Python:
 
 
         # We explore the matrix column-wise
-        self.dataMatrix = check_matrix(self.dataMatrix, 'csc')
+        self.dataMatrix = recommender_utils.check_matrix(self.dataMatrix, 'csc')
 
 
         # Compute sum of squared values to be used in normalization
@@ -308,7 +308,7 @@ class Compute_Similarity_Python:
             sum_of_squared_to_1_minus_alpha = np.power(sum_of_squared + 1e-6, 2 * (1 - self.asymmetric_alpha))
 
 
-        self.dataMatrix = check_matrix(self.dataMatrix, 'csc')
+        self.dataMatrix = recommender_utils.check_matrix(self.dataMatrix, 'csc')
 
         start_col_local = 0
         end_col_local = self.n_columns
@@ -385,24 +385,19 @@ class Compute_Similarity_Python:
                 elif self.shrink != 0:
                     this_column_weights = this_column_weights/self.shrink
 
-
-
-                # Sort indices and select topK
-                # Sorting is done in three steps. Faster then plain np.argsort for higher number of items
-                # - Partition the data to extract the set of relevant items
-                # - Sort only the relevant items
-                # - Get the original item index
-                relevant_items_partition = (-this_column_weights).argpartition(self.topK - 1)[0:self.topK]
-                relevant_items_partition_sorting = np.argsort(-this_column_weights[relevant_items_partition])
-                top_k_idx = relevant_items_partition[relevant_items_partition_sorting]
+                # Sort indices and select topK, partition the data to extract the set of relevant items
+                relevant_items_partition = np.argpartition(-this_column_weights, self.topK - 1, axis=0)[0:self.topK]
+                this_column_weights = this_column_weights[relevant_items_partition]
 
                 # Incrementally build sparse matrix, do not add zeros
-                notZerosMask = this_column_weights[top_k_idx] != 0.0
-                numNotZeros = np.sum(notZerosMask)
+                if np.any(this_column_weights == 0.0):
+                    non_zero_mask = this_column_weights != 0.0
+                    relevant_items_partition = relevant_items_partition[non_zero_mask]
+                    this_column_weights = this_column_weights[non_zero_mask]
 
-                similarity_builder.add_data_lists(row_list_to_add=top_k_idx[notZerosMask],
-                                                  col_list_to_add=np.ones(numNotZeros) * columnIndex,
-                                                  data_list_to_add=this_column_weights[top_k_idx][notZerosMask])
+                similarity_builder.add_data_lists(row_list_to_add=relevant_items_partition,
+                                                  col_list_to_add=np.ones(len(relevant_items_partition), dtype = np.int) * columnIndex,
+                                                  data_list_to_add=this_column_weights)
 
             # Add previous block size
             start_col_block += this_block_size

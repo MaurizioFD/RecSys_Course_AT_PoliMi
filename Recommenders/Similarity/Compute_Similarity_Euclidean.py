@@ -175,27 +175,22 @@ class Compute_Similarity_Euclidean:
                 else:
                     assert False
 
-
                 item_similarity[columnIndex] = 0.0
                 this_column_weights = item_similarity
 
-
-                # Sort indices and select topK
-                # Sorting is done in three steps. Faster then plain np.argsort for higher number of items
-                # - Partition the data to extract the set of relevant items
-                # - Sort only the relevant items
-                # - Get the original item index
-                relevant_items_partition = (-this_column_weights).argpartition(self.topK - 1)[0:self.topK]
-                relevant_items_partition_sorting = np.argsort(-this_column_weights[relevant_items_partition])
-                top_k_idx = relevant_items_partition[relevant_items_partition_sorting]
+                # Sort indices and select topK, partition the data to extract the set of relevant items
+                relevant_items_partition = np.argpartition(-this_column_weights, self.topK - 1, axis=0)[0:self.topK]
+                this_column_weights = this_column_weights[relevant_items_partition]
 
                 # Incrementally build sparse matrix, do not add zeros
-                notZerosMask = this_column_weights[top_k_idx] != 0.0
-                numNotZeros = np.sum(notZerosMask)
+                if np.any(this_column_weights == 0.0):
+                    non_zero_mask = this_column_weights != 0.0
+                    relevant_items_partition = relevant_items_partition[non_zero_mask]
+                    this_column_weights = this_column_weights[non_zero_mask]
 
-                similarity_builder.add_data_lists(row_list_to_add=top_k_idx[notZerosMask],
-                                                  col_list_to_add=np.ones(numNotZeros) * columnIndex,
-                                                  data_list_to_add=this_column_weights[top_k_idx][notZerosMask])
+                similarity_builder.add_data_lists(row_list_to_add=relevant_items_partition,
+                                                  col_list_to_add=np.ones(len(relevant_items_partition), dtype = np.int) *  columnIndex,
+                                                  data_list_to_add=this_column_weights)
 
 
             # Add previous block size

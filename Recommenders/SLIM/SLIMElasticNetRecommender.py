@@ -88,25 +88,20 @@ class SLIMElasticNetRecommender(BaseItemSimilarityMatrixRecommender):
 
             # self.model.coef_ contains the coefficient of the ElasticNet model
             # let's keep only the non-zero values
-
-            # Select topK values
-            # Sorting is done in three steps. Faster then plain np.argsort for higher number of items
-            # - Partition the data to extract the set of relevant items
-            # - Sort only the relevant items
-            # - Get the original item index
-
             nonzero_model_coef_index = self.model.sparse_coef_.indices
             nonzero_model_coef_value = self.model.sparse_coef_.data
 
-            local_topK = min(len(nonzero_model_coef_value)-1, self.topK)
+            # Check if there are more data points than topK, if so, extract the set of K best values
+            if len(nonzero_model_coef_value) > self.topK:
+                # Partition the data because this operation does not require to fully sort the data
+                relevant_items_partition = np.argpartition(-np.abs(nonzero_model_coef_value), self.topK-1, axis=0)[0:self.topK]
+                nonzero_model_coef_index = nonzero_model_coef_index[relevant_items_partition]
+                nonzero_model_coef_value = nonzero_model_coef_value[relevant_items_partition]
 
-            relevant_items_partition = (-nonzero_model_coef_value).argpartition(local_topK)[0:local_topK]
-            relevant_items_partition_sorting = np.argsort(-nonzero_model_coef_value[relevant_items_partition])
-            ranking = relevant_items_partition[relevant_items_partition_sorting]
+            similarity_builder.add_data_lists(row_list_to_add=nonzero_model_coef_index,
+                                              col_list_to_add=np.ones(len(nonzero_model_coef_index), dtype = np.int) * currentItem,
+                                              data_list_to_add=nonzero_model_coef_value)
 
-            similarity_builder.add_data_lists(row_list_to_add=nonzero_model_coef_index[ranking],
-                                              col_list_to_add=np.ones(len(nonzero_model_coef_index)) * currentItem,
-                                              data_list_to_add=nonzero_model_coef_value[ranking])
 
             # finally, replace the original values of the j-th column
             URM_train.data[start_pos:end_pos] = current_item_data_backup
@@ -182,15 +177,16 @@ def _partial_fit(items, topK, alpha, l1_ratio, urm_shape, positive_only=True, sh
         nonzero_model_coef_index = model.sparse_coef_.indices
         nonzero_model_coef_value = model.sparse_coef_.data
 
-        local_topK = min(len(nonzero_model_coef_value) - 1, topK)
+        # Check if there are more data points than topK, if so, extract the set of K best values
+        if len(nonzero_model_coef_value) > topK:
+            # Partition the data because this operation does not require to fully sort the data
+            relevant_items_partition = np.argpartition(-np.abs(nonzero_model_coef_value), topK-1, axis=0)[0:topK]
+            nonzero_model_coef_index = nonzero_model_coef_index[relevant_items_partition]
+            nonzero_model_coef_value = nonzero_model_coef_value[relevant_items_partition]
 
-        relevant_items_partition = (-nonzero_model_coef_value).argpartition(local_topK)[:local_topK]
-        relevant_items_partition_sorting = np.argsort(-nonzero_model_coef_value[relevant_items_partition])
-        ranking = relevant_items_partition[relevant_items_partition_sorting]
-
-        values.extend(nonzero_model_coef_value[ranking])
-        rows.extend(nonzero_model_coef_index[ranking])
-        cols.extend([currentItem] * len(ranking))
+        values.extend(nonzero_model_coef_value)
+        rows.extend(nonzero_model_coef_index)
+        cols.extend([currentItem] * len(nonzero_model_coef_index))
 
         X_j.data[X_j.indptr[currentItem]:X_j.indptr[currentItem + 1]] = backup
 

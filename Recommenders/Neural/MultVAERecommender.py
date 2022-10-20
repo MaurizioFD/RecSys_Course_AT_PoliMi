@@ -236,8 +236,11 @@ class MultVAERecommender(BaseRecommender, Incremental_Training_Early_Stopping, B
     RECOMMENDER_NAME = "MultVAERecommender"
 
 
-    def __init__(self, URM_train):
+    def __init__(self, URM_train, force_gpu = False):
         super(MultVAERecommender, self).__init__(URM_train)
+
+        if force_gpu:
+            assert len(tf.config.list_physical_devices('GPU'))>=1
 
 
     def _compute_item_score(self, user_id_array, items_to_compute = None):

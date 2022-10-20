@@ -154,16 +154,6 @@ class BaseRecommender(object):
             if remove_seen_flag:
                 scores_batch[user_index,:] = self._remove_seen_on_scores(user_id, scores_batch[user_index, :])
 
-            # Sorting is done in three steps. Faster then plain np.argsort for higher number of items
-            # - Partition the data to extract the set of relevant items
-            # - Sort only the relevant items
-            # - Get the original item index
-            # relevant_items_partition = (-scores_user).argpartition(cutoff)[0:cutoff]
-            # relevant_items_partition_sorting = np.argsort(-scores_user[relevant_items_partition])
-            # ranking = relevant_items_partition[relevant_items_partition_sorting]
-            #
-            # ranking_list.append(ranking)
-
 
         if remove_top_pop_flag:
             scores_batch = self._remove_TopPop_on_scores(scores_batch)
@@ -171,8 +161,12 @@ class BaseRecommender(object):
         if remove_custom_items_flag:
             scores_batch = self._remove_custom_items_on_scores(scores_batch)
 
+        # Sorting is done in three steps. Faster then plain np.argsort for higher number of items
+        # - Partition the data to extract the set of relevant items
+        # - Sort only the relevant items
+        # - Get the original item index
         # relevant_items_partition is block_size x cutoff
-        relevant_items_partition = (-scores_batch).argpartition(cutoff, axis=1)[:,0:cutoff]
+        relevant_items_partition = np.argpartition(-scores_batch, cutoff-1, axis=1)[:,0:cutoff]
 
         # Get original value and sort it
         # [:, None] adds 1 dimension to the array, from (block_size,) to (block_size,1)

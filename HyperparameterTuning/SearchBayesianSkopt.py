@@ -358,6 +358,7 @@ class SearchBayesianSkopt(SearchAbstractClass):
                                           n_jobs=self.n_jobs)
 
         except ValueError as e:
+            traceback.print_exc()
             self._write_log("{}: Search interrupted due to ValueError. The evaluated configurations may have had all the same value.\n".format(self.ALGORITHM_NAME))
             return
 
