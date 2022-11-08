@@ -84,6 +84,12 @@ Now you can compile all Cython algorithms by running the following command. The 
 python run_compile_all_cython.py
 ```
 
+If you are importing this repository on a Kaggle notebook, try to compile like this:
+```console
+!git clone https://github.com/MaurizioFD/RecSys_Course_AT_PoliMi
+cd RecSys_Course_AT_PoliMi
+!python run_compile_all_cython.py
+```
 
 
 ## Project structure
