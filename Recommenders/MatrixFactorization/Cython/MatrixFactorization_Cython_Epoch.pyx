@@ -34,7 +34,6 @@ cdef struct BPR_sample:
     long pos_item
     long neg_item
 
-
 cdef struct MSE_sample:
     long user
     long item
@@ -58,7 +57,8 @@ cdef class MatrixFactorization_Cython_Epoch:
 
     cdef int batch_size
 
-    cdef int algorithm_is_funk_svd, algorithm_is_asy_svd, algorithm_is_BPR
+    cdef int algorithm_is_svdpp, algorithm_is_asy_svd, algorithm_is_BPR, algorithm_is_WARP
+    cdef int WARP_neg_item_attempts
 
     cdef int[:] URM_train_indices, URM_train_indptr, profile_length
     cdef double[:] URM_train_data
@@ -93,13 +93,13 @@ cdef class MatrixFactorization_Cython_Epoch:
     cdef double momentum_1, momentum_2
 
     SGD_MODE_VALUES = ["sgd", "adam", "adagrad", "rmsprop"]
-    ALGORITHM_NAME_VALUES = ["FUNK_SVD", "ASY_SVD", "MF_BPR"]
+    ALGORITHM_NAME_VALUES = ["SVD++", "ASY_SVD", "MF_BPR", "MF_WARP"]
 
 
     def __init__(self, URM_train, n_factors = 1, algorithm_name = None,
                  batch_size = 1,
                  negative_interactions_quota = 0.5,
-                 dropout_quota = None,
+                 dropout_quota = None, WARP_neg_item_attempts = 10,
                  learning_rate = 1e-3, use_bias = False, use_embeddings = True,
                  user_reg = 0.0, item_reg = 0.0, bias_reg = 0.0, positive_reg = 0.0, negative_reg = 0.0,
                  verbose = False, print_step_seconds = 300, random_seed = None,
@@ -145,6 +145,7 @@ cdef class MatrixFactorization_Cython_Epoch:
         self.init_std_dev = init_std_dev
         self.MSE_negative_interactions_quota = negative_interactions_quota
         self.MSE_sample_negative_interactions_flag = self.MSE_negative_interactions_quota != 0.0
+        self.WARP_neg_item_attempts = WARP_neg_item_attempts
 
         self.URM_train_indices = URM_train.indices
         self.URM_train_data = np.array(URM_train.data, dtype=np.float64)
@@ -174,15 +175,16 @@ cdef class MatrixFactorization_Cython_Epoch:
 
     def _init_latent_factors(self):
 
-        self.algorithm_is_funk_svd = False
+        self.algorithm_is_svdpp = False
         self.algorithm_is_asy_svd = False
         self.algorithm_is_BPR = False
+        self.algorithm_is_WARP = False
 
         n_user_factors = self.n_users
         n_item_factors = self.n_items
 
-        if self.algorithm_name == "FUNK_SVD":
-            self.algorithm_is_funk_svd = True
+        if self.algorithm_name == "SVD++":
+            self.algorithm_is_svdpp = True
 
         elif self.algorithm_name == "ASY_SVD":
             self.algorithm_is_asy_svd = True
@@ -193,6 +195,11 @@ cdef class MatrixFactorization_Cython_Epoch:
             assert self.use_embeddings, "For MF_BPR use_embeddings must be True"
             self.algorithm_is_BPR = True
 
+        elif self.algorithm_name == "MF_WARP":
+            assert self.use_embeddings, "For MF_WARP use_embeddings must be True"
+            self.algorithm_is_WARP = True
+        else:
+            raise ValueError("Algorithm_name not recognized")
 
         if self.use_embeddings:
             # W and H cannot be initialized as zero, otherwise the gradient will always be zero
@@ -301,18 +308,18 @@ cdef class MatrixFactorization_Cython_Epoch:
 
     def epochIteration_Cython(self):
 
-        if self.algorithm_is_funk_svd:
-            self.epochIteration_Cython_FUNK_SVD_SGD()
+        if self.algorithm_is_svdpp:
+            self.epochIteration_Cython_SVD_pp_SGD()
 
         elif self.algorithm_is_asy_svd:
             self.epochIteration_Cython_ASY_SVD_SGD()
 
-        elif self.algorithm_is_BPR:
+        elif self.algorithm_is_BPR or self.algorithm_is_WARP:
             self.epochIteration_Cython_BPR_SGD()
 
 
 
-    def epochIteration_Cython_FUNK_SVD_SGD(self):
+    def epochIteration_Cython_SVD_pp_SGD(self):
 
         # Get number of available interactions
         cdef long n_total_batch = int(len(self.URM_train_data) / self.batch_size) + 1
@@ -385,7 +392,7 @@ cdef class MatrixFactorization_Cython_Epoch:
                             W_u = self.USER_factors[sample.user, factor_index]
 
                             # Compute gradients
-                            local_gradient_item = prediction_error * W_u - self.positive_reg * H_i
+                            local_gradient_item = prediction_error * W_u - self.item_reg * H_i
                             local_gradient_user = prediction_error * H_i - self.user_reg * W_u
 
                             # Store the gradient in the temporary accumulator
@@ -1036,6 +1043,71 @@ cdef class MatrixFactorization_Cython_Epoch:
             # If the positive item in position 'index' is > sample.neg_item or index == n_seen_items, negative selected
             if index == n_seen_items or self.URM_train_indices[start_pos_seen_items + index] > sample.neg_item:
                 neg_item_selected = True
+
+
+        return sample
+
+
+
+
+    cdef BPR_sample sampleWARP_Cython(self):
+
+        cdef BPR_sample sample = BPR_sample(-1,-1,-1)
+        cdef long index, factor_index, start_pos_seen_items, end_pos_seen_items
+
+        cdef int neg_item_selected, n_seen_items = 0, neg_item_attempts
+        cdef double pos_item_prediction, neg_item_prediction
+
+
+        # Skip users with no interactions or with no negative items
+        while n_seen_items == 0 or n_seen_items == self.n_items:
+
+            sample.user = rand() % self.n_users
+
+            start_pos_seen_items = self.URM_train_indptr[sample.user]
+            end_pos_seen_items = self.URM_train_indptr[sample.user+1]
+
+            n_seen_items = end_pos_seen_items - start_pos_seen_items
+
+
+        index = rand() % n_seen_items
+
+        sample.pos_item = self.URM_train_indices[start_pos_seen_items + index]
+        pos_item_prediction = 0.0
+
+        for factor_index in range(self.n_factors):
+            pos_item_prediction += self.USER_factors[sample.user,factor_index] * self.ITEM_factors[sample.pos_item,factor_index]
+
+
+
+        neg_item_selected = False
+        neg_item_attempts = 0
+
+        # It's faster to just try again then to build a mapping of the non-seen items
+        # for every user
+        while not neg_item_selected and neg_item_attempts < self.WARP_neg_item_attempts:
+
+            sample.neg_item = rand() % self.n_items
+
+            index = 0
+            # Indices data is sorted, so I don't need to go to the end of the current row
+            while index < n_seen_items and self.URM_train_indices[start_pos_seen_items + index] < sample.neg_item:
+                index+=1
+
+            # If the positive item in position 'index' is == sample.neg_item, negative not selected
+            # If the positive item in position 'index' is > sample.neg_item or index == n_seen_items, negative selected
+            if index == n_seen_items or self.URM_train_indices[start_pos_seen_items + index] > sample.neg_item:
+
+                # Check if it is a "violating sample", i.e., the prediction for the negative item is higher than the prediction for the positive
+                neg_item_prediction = 0.0
+
+                for factor_index in range(self.n_factors):
+                    neg_item_prediction += self.USER_factors[sample.user,factor_index] * self.ITEM_factors[sample.neg_item,factor_index]
+
+                if pos_item_prediction > neg_item_prediction:
+                    neg_item_selected = True
+                else:
+                    neg_item_attempts += 1
 
 
         return sample

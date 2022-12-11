@@ -37,6 +37,7 @@ class _MatrixFactorization_Cython(BaseMatrixFactorizationRecommender, Incrementa
             sgd_mode='sgd',
             negative_interactions_quota = 0.0,
             dropout_quota = None,
+            WARP_neg_item_attempts = 10,
             init_mean = 0.0, init_std_dev = 0.1,
             user_reg = 0.0, item_reg = 0.0, bias_reg = 0.0, positive_reg = 0.0, negative_reg = 0.0,
             random_seed = None,
@@ -56,7 +57,7 @@ class _MatrixFactorization_Cython(BaseMatrixFactorizationRecommender, Incrementa
         from Recommenders.MatrixFactorization.Cython.MatrixFactorization_Cython_Epoch import MatrixFactorization_Cython_Epoch
 
 
-        if self.algorithm_name in ["FUNK_SVD", "ASY_SVD"]:
+        if self.algorithm_name in ["SVD++", "ASY_SVD"]:
 
             self.cythonEpoch = MatrixFactorization_Cython_Epoch(self.URM_train,
                                                                 algorithm_name = self.algorithm_name,
@@ -76,7 +77,7 @@ class _MatrixFactorization_Cython(BaseMatrixFactorizationRecommender, Incrementa
                                                                 verbose = self.verbose,
                                                                 random_seed = random_seed)
 
-        elif self.algorithm_name == "MF_BPR":
+        elif self.algorithm_name in ["MF_BPR", "MF_WARP"]:
 
             # Select only positive interactions
             URM_train_positive = self.URM_train.copy()
@@ -101,6 +102,7 @@ class _MatrixFactorization_Cython(BaseMatrixFactorizationRecommender, Incrementa
                                                                 init_mean = init_mean,
                                                                 init_std_dev = init_std_dev,
                                                                 dropout_quota = dropout_quota,
+                                                                WARP_neg_item_attempts = WARP_neg_item_attempts,
                                                                 verbose = self.verbose,
                                                                 random_seed = random_seed)
         self._prepare_model_for_validation()
@@ -169,10 +171,29 @@ class MatrixFactorization_BPR_Cython(_MatrixFactorization_Cython):
 
 
 
-
-class MatrixFactorization_FunkSVD_Cython(_MatrixFactorization_Cython):
+class MatrixFactorization_WARP_Cython(_MatrixFactorization_Cython):
     """
-    Subclas allowing only for FunkSVD model
+    Subclas allowing only for MF WARP
+    """
+
+    RECOMMENDER_NAME = "MatrixFactorization_WARP_Cython_Recommender"
+
+    def __init__(self, *pos_args, **key_args):
+        super(MatrixFactorization_WARP_Cython, self).__init__(*pos_args, algorithm_name="MF_WARP", **key_args)
+
+    def fit(self, **key_args):
+
+        key_args["use_bias"] = False
+        key_args["negative_interactions_quota"] = 0.0
+
+        super(MatrixFactorization_WARP_Cython, self).fit(**key_args)
+
+
+
+
+class MatrixFactorization_SVDpp_Cython(_MatrixFactorization_Cython):
+    """
+    Subclas allowing only for FunkSVD and SVD++ model
 
     Reference: http://sifter.org/~simon/journal/20061211.html
 
@@ -184,15 +205,15 @@ class MatrixFactorization_FunkSVD_Cython(_MatrixFactorization_Cython):
 
     """
 
-    RECOMMENDER_NAME = "MatrixFactorization_FunkSVD_Cython_Recommender"
+    RECOMMENDER_NAME = "MatrixFactorization_SVDpp_Cython_Recommender"
 
     def __init__(self, *pos_args, **key_args):
-        super(MatrixFactorization_FunkSVD_Cython, self).__init__(*pos_args, algorithm_name="FUNK_SVD", **key_args)
+        super(MatrixFactorization_SVDpp_Cython, self).__init__(*pos_args, algorithm_name="SVD++", **key_args)
 
 
     def fit(self, **key_args):
 
-        super(MatrixFactorization_FunkSVD_Cython, self).fit(**key_args)
+        super(MatrixFactorization_SVDpp_Cython, self).fit(**key_args)
 
 
 

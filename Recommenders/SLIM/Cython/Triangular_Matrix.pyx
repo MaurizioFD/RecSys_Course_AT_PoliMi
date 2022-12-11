@@ -177,27 +177,14 @@ cdef class Triangular_Matrix:
             if TopK:
 
                 # Sort indices and select TopK
-                # Using numpy implies some overhead, unfortunately the plain C qsort function is even slower
-                #top_k_idx = np.argsort(this_item_weights) [-self.TopK:]
-
-                # Sorting is done in three steps. Faster then plain np.argsort for higher number of items
-                # because we avoid sorting elements we already know we don't care about
-                # - Partition the data to extract the set of TopK items, this set is unsorted
-                # - Sort only the TopK items, discarding the rest
-                # - Get the original item index
-
                 currentRowArray_np = - np.array(currentRowArray)
-                #
-                # Get the unordered set of topK items
-                top_k_partition = np.argpartition(currentRowArray_np, TopK-1)[0:TopK]
-                # Sort only the elements in the partition
-                top_k_partition_sorting = np.argsort(currentRowArray_np[top_k_partition])
-                # Get original index
-                top_k_idx = top_k_partition[top_k_partition_sorting]
 
-                for index in range(len(top_k_idx)):
+                # Sort indices and select topK, partition the data to extract the set of relevant items
+                relevant_items_partition = np.argpartition(currentRowArray_np, TopK - 1, axis=0)[0:TopK]
 
-                    col = top_k_idx[index]
+                for index in range(len(relevant_items_partition)):
+
+                    col = relevant_items_partition[index]
 
                     if currentRowArray[col] != 0.0:
                         indices.append(col)
