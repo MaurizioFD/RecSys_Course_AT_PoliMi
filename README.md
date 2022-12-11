@@ -90,6 +90,7 @@ If you are importing this repository on a Kaggle notebook, try to compile like t
 cd RecSys_Course_AT_PoliMi
 !python run_compile_all_cython.py
 ```
+Furthermore, remember that folder and file names containing spaces often cause problems, for example the default folder name of Colab in Google Drive is "Colab Notebooks", which contains a space and likely causes the compilation of Cython files to fail. If this happens, replace the space with another caracter, such as "Colab_Notebooks"
 
 
 ## Project structure
