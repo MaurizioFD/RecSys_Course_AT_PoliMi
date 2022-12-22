@@ -101,6 +101,11 @@ class SLIM_BPR_Cython(BaseItemSimilarityMatrixRecommender, Incremental_Training_
                 self._print(string + "Using sparse matrix.")
                 self.train_with_sparse_weights = True
 
+        elif self.train_with_sparse_weights:
+            self._print("Using sparse matrix.")
+        else:
+            self._print("Using dense matrix.")
+
 
         # Select only positive interactions
         URM_train_positive = self.URM_train.copy()

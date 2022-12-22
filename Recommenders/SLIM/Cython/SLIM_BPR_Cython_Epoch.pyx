@@ -63,25 +63,24 @@ cdef class SLIM_BPR_Cython_Epoch:
     cdef int topK
     cdef int symmetric, train_with_sparse_weights, final_model_sparse_weights
 
-    cdef double learning_rate, li_reg, lj_reg
+    cdef float learning_rate, li_reg, lj_reg
 
     cdef int[:] URM_mask_indices, URM_mask_indptr
 
     cdef Sparse_Matrix_Tree_CSR S_sparse
     cdef Triangular_Matrix S_symmetric
-    cdef double[:,:] S_dense
+    cdef float[:,:] S_dense
 
 
     # Adaptive gradient
-
     cdef int useAdaGrad, useRmsprop, useAdam, verbose
 
-    cdef double [:] sgd_cache_I
-    cdef double gamma
+    cdef float [:] sgd_cache_I
+    cdef float gamma
 
-    cdef double [:] sgd_cache_I_momentum_1, sgd_cache_I_momentum_2
-    cdef double beta_1, beta_2, beta_1_power_t, beta_2_power_t
-    cdef double momentum_1, momentum_2
+    cdef float [:] sgd_cache_I_momentum_1, sgd_cache_I_momentum_2
+    cdef float beta_1, beta_2, beta_1_power_t, beta_2_power_t
+    cdef float momentum_1, momentum_2
 
 
 
@@ -125,7 +124,7 @@ cdef class SLIM_BPR_Cython_Epoch:
         elif self.symmetric:
             self.S_symmetric = Triangular_Matrix(self.n_items, isSymmetric = True)
         else:
-            self.S_dense = np.zeros((self.n_items, self.n_items), dtype=np.float64)
+            self.S_dense = np.zeros((self.n_items, self.n_items), dtype=np.float32)
 
         if random_seed is not None:
             srand(<unsigned> random_seed)
@@ -173,11 +172,11 @@ cdef class SLIM_BPR_Cython_Epoch:
         else:
 
             # Adagrad and RMSProp
-            self.sgd_cache_I = np.zeros((self.n_items), dtype=np.float64)
+            self.sgd_cache_I = np.zeros((self.n_items), dtype=np.float32)
 
             # Adam
-            self.sgd_cache_I_momentum_1 = np.zeros((self.n_items), dtype=np.float64)
-            self.sgd_cache_I_momentum_2 = np.zeros((self.n_items), dtype=np.float64)
+            self.sgd_cache_I_momentum_1 = np.zeros((self.n_items), dtype=np.float32)
+            self.sgd_cache_I_momentum_2 = np.zeros((self.n_items), dtype=np.float32)
 
 
 
@@ -216,8 +215,8 @@ cdef class SLIM_BPR_Cython_Epoch:
         cdef BPR_sample sample
         cdef long i, j
         cdef long index, seen_item, n_current_sample
-        cdef double x_uij, gradient, loss = 0.0
-        cdef double local_gradient_i, local_gradient_j
+        cdef float x_uij, gradient, loss = 0.0
+        cdef float local_gradient_i, local_gradient_j
 
         cdef int print_step
 
@@ -370,10 +369,10 @@ cdef class SLIM_BPR_Cython_Epoch:
                 if self.final_model_sparse_weights:
                     return similarityMatrixTopK(np.array(self.S_dense.T), k=self.topK).T
                 else:
-                    return np.array(self.S_dense)
+                    return np.array(self.S_dense, dtype=np.float32)
 
 
-        else :
+        else:
 
             if self.train_with_sparse_weights:
                 return self.S_sparse.get_scipy_csr(TopK=self.topK)
@@ -385,17 +384,17 @@ cdef class SLIM_BPR_Cython_Epoch:
                 if self.final_model_sparse_weights:
                     return similarityMatrixTopK(np.array(self.S_dense.T), k=self.topK).T
                 else:
-                    return np.array(self.S_dense)
+                    return np.array(self.S_dense, dtype=np.float32)
 
 
 
 
 
 
-    cdef double adaptive_gradient(self, double gradient, long user_or_item_id, double[:] sgd_cache, double[:] sgd_cache_momentum_1, double[:] sgd_cache_momentum_2):
+    cdef float adaptive_gradient(self, float gradient, long user_or_item_id, float[:] sgd_cache, float[:] sgd_cache_momentum_1, float[:] sgd_cache_momentum_2):
 
 
-        cdef double gradient_update
+        cdef float gradient_update
 
         if self.useAdaGrad:
             sgd_cache[user_or_item_id] += gradient ** 2
@@ -508,7 +507,7 @@ cdef extern from "stdlib.h":
 # Node struct
 ctypedef struct matrix_element_tree_s:
     long column
-    double data
+    float data
     matrix_element_tree_s *higher
     matrix_element_tree_s *lower
 
@@ -517,7 +516,7 @@ ctypedef struct head_pointer_tree_s:
 
 
 # Function to allocate a new node
-cdef matrix_element_tree_s * pointer_new_matrix_element_tree_s(long column, double data, matrix_element_tree_s *higher,  matrix_element_tree_s *lower):
+cdef matrix_element_tree_s * pointer_new_matrix_element_tree_s(long column, float data, matrix_element_tree_s *higher,  matrix_element_tree_s *lower):
 
     cdef matrix_element_tree_s * new_element
 
@@ -616,14 +615,14 @@ cdef class Sparse_Matrix_Tree_CSR:
 
 
 
-    cdef double add_value(self, long row, long col, double value):
+    cdef float add_value(self, long row, long col, float value):
         """
         The function adds a value to the specified cell. A new cell is created if necessary.         
         
         :param row: cell coordinates
         :param col:  cell coordinates
         :param value: value to add
-        :return double: resulting cell value
+        :return float: resulting cell value
         """
 
         if row >= self.num_rows or col >= self.num_cols or row < 0 or col < 0:
@@ -682,13 +681,13 @@ cdef class Sparse_Matrix_Tree_CSR:
 
 
 
-    cdef double get_value(self, long row, long col):
+    cdef float get_value(self, long row, long col):
         """
         The function returns the value of the specified cell.         
         
         :param row: cell coordinates
         :param col:  cell coordinates
-        :return double: cell value
+        :return float: cell value
         """
 
 
@@ -738,7 +737,7 @@ cdef class Sparse_Matrix_Tree_CSR:
         """
         The function returns the current sparse matrix as a scipy_csr object         
    
-        :return double: scipy_csr object
+        :return float: scipy_csr object
         """
         cdef int terminate
         cdef long row
@@ -1225,7 +1224,7 @@ cdef class Triangular_Matrix:
     cdef long num_rows, num_cols
     cdef int isSymmetric
 
-    cdef double** row_pointer
+    cdef float** row_pointer
 
 
 
@@ -1239,7 +1238,7 @@ cdef class Triangular_Matrix:
         self.num_cols = num_rows
         self.isSymmetric = isSymmetric
 
-        self.row_pointer = <double **> PyMem_Malloc(self.num_rows * sizeof(double*))
+        self.row_pointer = <float **> PyMem_Malloc(self.num_rows * sizeof(float*))
         if self.row_pointer == NULL:
             raise MemoryError
 
@@ -1248,7 +1247,7 @@ cdef class Triangular_Matrix:
             self.row_pointer[numRow] = NULL
 
         for numRow in range(self.num_rows):
-            self.row_pointer[numRow] = < double *> PyMem_Malloc((numRow+1) * sizeof(double))
+            self.row_pointer[numRow] = < float *> PyMem_Malloc((numRow+1) * sizeof(float))
 
             if self.row_pointer[numRow] == NULL:
                 self.dealloc()
@@ -1277,14 +1276,14 @@ cdef class Triangular_Matrix:
 
 
 
-    cdef double add_value(self, long row, long col, double value):
+    cdef float add_value(self, long row, long col, float value):
         """
         The function adds a value to the specified cell. A new cell is created if necessary.         
         
         :param row: cell coordinates
         :param col:  cell coordinates
         :param value: value to add
-        :return double: resulting cell value
+        :return float: resulting cell value
         """
 
         if row >= self.num_rows or col >= self.num_cols or row < 0 or col < 0:
@@ -1311,13 +1310,13 @@ cdef class Triangular_Matrix:
 
 
 
-    cdef double get_value(self, long row, long col):
+    cdef float get_value(self, long row, long col):
         """
         The function returns the value of the specified cell.         
         
         :param row: cell coordinates
         :param col:  cell coordinates
-        :return double: cell value
+        :return float: cell value
         """
 
         if row >= self.num_rows or col >= self.num_cols or row < 0 or col < 0:
@@ -1344,17 +1343,17 @@ cdef class Triangular_Matrix:
         """
         The function returns the current sparse matrix as a scipy_csr object         
    
-        :return double: scipy_csr object
+        :return float: scipy_csr object
         """
         cdef int terminate
         cdef long row, col, index
 
-        cdef array[double] template_zero = array('d')
-        cdef array[double] currentRowArray = clone(template_zero, self.num_cols, zero=True)
+        cdef array[float] template_zero = array('f')
+        cdef array[float] currentRowArray = clone(template_zero, self.num_cols, zero=True)
 
         # Declare numpy data type to use vetor indexing and simplify the topK selection code
         cdef np.ndarray[LONG_t, ndim=1] relevant_items_partition
-        cdef np.ndarray[np.float64_t, ndim=1] currentRowArray_np
+        cdef np.ndarray[np.float32_t, ndim=1] currentRowArray_np
 
 
         data = []
@@ -1407,7 +1406,7 @@ cdef class Triangular_Matrix:
         #Set terminal indptr
         indptr.append(len(data))
 
-        return sps.csr_matrix((data, indices, indptr), shape=(self.num_rows, self.num_cols))
+        return sps.csr_matrix((data, indices, indptr), shape=(self.num_rows, self.num_cols), dtype=np.float32)
 
 
 

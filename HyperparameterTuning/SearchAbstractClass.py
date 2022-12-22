@@ -341,7 +341,7 @@ class SearchAbstractClass(object):
                     self.metadata_dict["result_on_earlystopping_df"] = pd.DataFrame(dtype=object) if issubclass(self.recommender_class, Incremental_Training_Early_Stopping) else None
 
                 # Add the data from all validation steps
-                if self.metadata_dict["result_on_earlystopping_df"] is not None:
+                if self.metadata_dict["result_on_earlystopping_df"] is not None and recommender_instance.get_validation_summary_table() is not None:
                     earlystopping_df_multiindex = pd.concat({self.model_counter: recommender_instance.get_validation_summary_table()}, names=['model_counter'])
                     self.metadata_dict["result_on_earlystopping_df"] = pd.concat([self.metadata_dict["result_on_earlystopping_df"], earlystopping_df_multiindex])
 

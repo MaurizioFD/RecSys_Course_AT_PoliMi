@@ -107,7 +107,7 @@ class Incremental_Training_Early_Stopping(object):
             self._earlystopping_validation_summary_df = pd.concat([self._earlystopping_validation_summary_df, results_run], axis=0)
 
     def get_validation_summary_table(self):
-        return self._earlystopping_validation_summary_df.copy()
+        return self._earlystopping_validation_summary_df.copy() if self._earlystopping_validation_summary_df is not None else None
 
     def _train_with_early_stopping(self, epochs_max, epochs_min = 0,
                                    validation_every_n = None, stop_on_validation = False,
@@ -201,7 +201,7 @@ class Incremental_Training_Early_Stopping(object):
             # If no validation required, always keep the latest
             if evaluator_object is None:
 
-                self.epochs_best = epochs_current
+                self.epochs_best = epochs_current +1
 
             # Determine whether a validaton step is required
             elif (epochs_current + 1) % validation_every_n == 0:
