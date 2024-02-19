@@ -13,7 +13,6 @@ from Data_manager.DataReader_utils import remove_empty_rows_and_cols
 import numpy as np
 
 
-
 class DataPostprocessing_K_Cores(DataPostprocessing):
     """
     This class selects a dense partition of URM such that all items and users have at least K interactions.
