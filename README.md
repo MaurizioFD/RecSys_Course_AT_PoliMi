@@ -1,6 +1,8 @@
 # RecSys Course @ Politecnico di Milano
 This is the official repository for the Recommender Systems course at Polimi.
 
+⚠️ [ARCHIVED] This version has been **archived as of october 2024** and will not be updated anymore, please refer to [the new version on our organization page](https://github.com/recsyspolimi/RecSys_Course_AT_PoliMi).
+
 Developed by <a href="https://mauriziofd.github.io/" target="_blank">Maurizio Ferrari Dacrema</a>, Assistant Professor at Politecnico di Milano. 
 See the websites of our [Recommender Systems Group](http://recsys.deib.polimi.it/) and our [Quantum Computing Group](https://quantum.polimi.it/) for more information on our team, thesis and research activities.
 The introductory slides are available [here](slides/Introduction%20and%20Materials%20for%20RecSys%20Practice%20Sessions.pdf). 
